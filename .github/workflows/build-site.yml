@@ -2,9 +2,9 @@
 name: AI Website Builder
 
 on:
-
-  workflow_dispatch:
-
+  push:
+    paths:
+      - "prompts/**"
 jobs:
 
   build:
