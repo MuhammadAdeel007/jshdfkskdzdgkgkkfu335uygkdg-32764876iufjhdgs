@@ -3,23 +3,15 @@ from pathlib import Path
 
 MODEL = "openai/deepseek-ai/deepseek-v4-pro"
 
-prompts = sorted(
-    Path("prompts").glob("*.md")
-)
-
-for prompt_file in prompts:
-
+for prompt_file in sorted(Path("prompts").glob("*.md")):
     prompt = prompt_file.read_text()
 
-    subprocess.run(
-        [
-            "aider",
-            "--yes",
-            "--model",
-            MODEL,
-            "src",
-            "--message",
-            prompt,
-        ],
-        check=True
-    )
+    subprocess.run([
+        "aider",
+        "--yes",
+        "--model",
+        MODEL,
+        "index.html",
+        "--message",
+        prompt
+    ], check=True)
