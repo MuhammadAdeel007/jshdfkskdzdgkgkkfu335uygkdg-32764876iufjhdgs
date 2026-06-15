@@ -24,6 +24,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -76,6 +78,9 @@ jobs:
           git diff --cached --quiet || \
           git commit -m "AI generated website"
 
+      - name: Rebase
+        run: |
+          git pull --rebase origin main
       - name: Push
         run: |
           git pull --rebase origin main
