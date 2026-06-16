@@ -7,23 +7,23 @@ MODEL = "openai/deepseek-ai/deepseek-v4-pro"
 PROMPT_FILES = {
     "00": {
         "edit": ["site/docs/architecture.md"],
-        "read": []
+        "read": ["site/docs/project-state.md"]
     },
     "01": {
         "edit": ["site/docs/architecture.md"],
-        "read": []
+        "read": ["site/docs/project-state.md"]
     },
     "02": {
         "edit": ["site/assets/css/style.css"],
-        "read": ["site/docs/architecture.md"]
+        "read": ["site/docs/architecture.md","site/docs/project-state.md"]
     },
     "03": {
         "edit": ["site/index.html"],
-        "read": ["site/docs/architecture.md", "site/assets/css/style.css"]
+        "read": ["site/docs/architecture.md", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "04": {
         "edit": ["site/services.html"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "05": {
         "edit": [
@@ -31,27 +31,27 @@ PROMPT_FILES = {
             "site/templates/state-template.html",
             "site/templates/county-template.html"
         ],
-        "read": ["site/index.html", "site/assets/css/style.css", "site/docs/architecture.md", "site/docs/internal-linking.md"]
+        "read": ["site/index.html", "site/assets/css/style.css", "site/docs/architecture.md", "site/docs/internal-linking.md","site/docs/project-state.md"]
     },
     "06": {
         "edit": ["site/blog.html"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "07": {
         "edit": ["site/templates/article-template.html"],
-        "read": ["site/blog.html", "site/assets/css/style.css"]
+        "read": ["site/blog.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "08": {
         "edit": ["site/faq.html"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "09": {
         "edit": ["site/about.html"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "10": {
         "edit": ["site/contact.html"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "11": {
         "edit": ["site/assets/css/style.css"],
@@ -61,23 +61,24 @@ PROMPT_FILES = {
             "site/blog.html",
             "site/faq.html",
             "site/about.html",
-            "site/contact.html"
+            "site/contact.html",
+            "site/docs/project-state.md"
         ]
     },
     "12": {
         "edit": ["site/assets/js/main.js"],
-        "read": ["site/index.html", "site/assets/css/style.css"]
+        "read": ["site/index.html", "site/assets/css/style.css","site/docs/project-state.md"]
     },
     "13": {
         "edit": ["site/sitemap.xml", "site/robots.txt", "site/docs/seo.md", "site/docs/internal-linking.md"],
-        "read": ["site/services.html", "site/index.html"]
+        "read": ["site/services.html", "site/index.html","site/docs/project-state.md"]
     },
     "14": {
         "edit": [
             "site/templates/city-template.html",
             "site/templates/state-template.html"
         ],
-        "read": ["site/docs/seo.md", "site/docs/architecture.md", "site/docs/internal-linking.md", "site/index.html"]
+        "read": ["site/docs/seo.md", "site/docs/architecture.md", "site/docs/internal-linking.md", "site/index.html","site/docs/project-state.md"]
     },
 }
 
