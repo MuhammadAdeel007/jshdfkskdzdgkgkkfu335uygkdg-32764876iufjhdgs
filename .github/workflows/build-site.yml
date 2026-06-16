@@ -64,24 +64,16 @@ jobs:
           touch site/docs/seo.md
           touch site/docs/internal-linking.md
           
-      - name: Run AI Pipeline
-        run: |
-          python pipeline.py
-
       - name: Commit Changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add .
-
-          git diff --cached --quiet || \
-          git commit -m "AI generated website"
-
-      - name: Rebase
+      - name: Run AI Pipeline
         run: |
-          git pull --rebase origin main
-      - name: Push
+          python pipeline.py
+
+      - name: Push all commits
         run: |
           git pull --rebase origin main
           git push origin main
