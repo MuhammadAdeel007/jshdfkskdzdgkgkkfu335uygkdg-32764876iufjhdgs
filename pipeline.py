@@ -140,6 +140,7 @@ def run_prompt(prompt_file, edit_files, read_files, retries=5):
                 [
                     "aider",
                     "--yes",
+                    "--no-stream", 
                     "--model", MODEL,
                     *edit_files,
                     *read_args,
@@ -149,7 +150,7 @@ def run_prompt(prompt_file, edit_files, read_files, retries=5):
             )
             return True
         except subprocess.CalledProcessError as e:
-            wait = 2 ** attempt * 5
+            wait = 2 ** attempt * 30
             print(f"  Attempt {attempt + 1} failed. Retrying in {wait}s... ({e})")
             time.sleep(wait)
 
