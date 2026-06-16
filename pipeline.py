@@ -102,8 +102,32 @@ def git_commit(label):
     else:
         print(f"  No changes to commit for: {label}")
 
+STATE_LABELS = {
+    "00": "Global rules defined",
+    "01": "Architecture documented",
+    "02": "CSS base created",
+    "03": "Homepage built",
+    "04": "Services page built",
+    "05": "Location templates built",
+    "06": "Blog page built",
+    "07": "Article template built",
+    "08": "FAQ page built",
+    "09": "About page built",
+    "10": "Contact page built",
+    "11": "CSS finalized",
+    "12": "JavaScript built",
+    "13": "SEO files created",
+    "14": "Programmatic SEO templates finalized",
+}
 
-def run_prompt(prompt_file, edit_files, read_files, retries=3):
+def update_project_state(prefix):
+    label = STATE_LABELS.get(prefix, prefix)
+    state_file = Path("site/docs/project-state.md")
+    current = state_file.read_text() if state_file.exists() else "# Project State\n\n## Completed\n"
+    current += f"- ✓ {label}\n"
+    state_file.write_text(current)
+
+def run_prompt(prompt_file, edit_files, read_files, retries=5):
     read_args = []
     for f in read_files:
         if Path(f).exists() and Path(f).stat().st_size > 0:
@@ -152,9 +176,14 @@ def main():
         print(f"  Edit : {edit_files}")
         print(f"  Read : {read_files}")
 
-        success = run_prompt(prompt_file, edit_files, read_files)
-
+        try:
+            success = run_prompt(prompt_file, edit_files, read_files)
+        except Exception as e:
+            print(f"  ERROR in {prompt_file.name}: {e}")
+            continue
+            
         if success:
+            update_project_state(prefix)
             git_commit(label)
 
 
