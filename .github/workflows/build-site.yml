@@ -50,12 +50,13 @@ jobs:
           touch site/about.html
           touch site/contact.html
 
-          touch site/assets/css/style.css
-          touch site/assets/js/main.js
-
           touch site/sitemap.xml
           touch site/robots.txt
 
+          touch site/assets/css/style.css
+          touch site/assets/js/main.js
+
+          touch site/templates/article-template.html
           touch site/templates/state-template.html
           touch site/templates/county-template.html
           touch site/templates/city-template.html
