@@ -388,6 +388,9 @@ def main():
 
         completed = get_completed_prompts()
 
+        prefix = prompt_file.stem[:2]
+        label = STATE_LABELS.get(prefix, prefix)
+    
         for prompt_file in prompts:
             if label in completed:
                 print(
