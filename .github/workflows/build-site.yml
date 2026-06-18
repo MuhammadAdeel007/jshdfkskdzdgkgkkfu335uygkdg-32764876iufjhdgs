@@ -71,6 +71,15 @@ jobs:
       - name: Run AI Pipeline
         run: |
           python pipeline.py
+          
+      - name: Verify commits
+        run: |
+          echo "===== GIT LOG ====="
+          git log --oneline -20
+      
+          echo ""
+          echo "===== GIT STATUS ====="
+          git status
 
       - name: Push all commits
         run: |
