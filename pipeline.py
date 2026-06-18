@@ -234,12 +234,11 @@ def main():
                     "WARNING: HEAD changed during aider run. "
                     "Aider may still be auto-committing."
                 )
-
-             if files_changed:
+            if files_changed:
                 update_project_state(prefix)
                 git_commit(label)
                 time.sleep(15)
-             else:
+            else:
                 print(
                     f"No file changes detected for {prompt_file.name}"
                 )
