@@ -388,11 +388,13 @@ def main():
 
         completed = get_completed_prompts()
 
-        prefix = prompt_file.stem[:2]
-        label = STATE_LABELS.get(prefix, prefix)
+        
     
         for prompt_file in prompts:
-            if label in completed:
+            prefix = prompt_file.stem[:2]
+            label = STATE_LABELS.get(prefix, prefix)
+            
+            if prefix in completed:
                 print(
                     f"Skipping {prompt_file.name} "
                     f"(already committed)"
