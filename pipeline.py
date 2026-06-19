@@ -14,8 +14,8 @@ from pathlib import Path
 
 MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
 LOCK_FILE        = Path(".aider-run.lock")
-BASE_RETRY_DELAY = 30    # seconds (doubles each attempt)
-MAX_RETRY_DELAY  = 600   # seconds cap
+BASE_RETRY_DELAY = 120    # seconds (doubles each attempt)
+MAX_RETRY_DELAY  = 900   # seconds cap
 POST_COMMIT_SLEEP = 15   # seconds between prompts after a commit
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -31,31 +31,29 @@ log = logging.getLogger(__name__)
 
 PROMPT_FILES: dict[str, dict[str, list[str]]] = {
     "00": {
-        "edit": ["site/docs/architecture.md"],
-        "read": ["site/docs/project-state.md"],
+        "edit": ["site/docs/global-rules.md","site/docs/project-state.md"],
+        "read": [],
     },
     "01": {
-        "edit": ["site/docs/architecture.md"],
-        "read": ["site/docs/project-state.md"],
+        "edit": ["site/docs/architecture.md","site/docs/project-state.md"],
+        "read": ["site/docs/global-rules.md"],
     },
     "02": {
-        "edit": ["site/assets/css/style.css"],
-        "read": ["site/docs/architecture.md", "site/docs/project-state.md"],
+        "edit": ["site/assets/css/style.css","site/docs/project-state.md"],
+        "read": ["site/docs/architecture.md"],
     },
     "03": {
-        "edit": ["site/index.html"],
+        "edit": ["site/index.html","site/docs/project-state.md"],
         "read": [
             "site/docs/architecture.md",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "04": {
-        "edit": ["site/services.html"],
+        "edit": ["site/services.html","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "05": {
@@ -63,57 +61,52 @@ PROMPT_FILES: dict[str, dict[str, list[str]]] = {
             "site/templates/city-template.html",
             "site/templates/state-template.html",
             "site/templates/county-template.html",
+            "site/docs/project-state.md"
         ],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
             "site/docs/architecture.md",
             "site/docs/internal-linking.md",
-            "site/docs/project-state.md",
         ],
     },
     "06": {
-        "edit": ["site/blog.html"],
+        "edit": ["site/blog.html","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "07": {
-        "edit": ["site/templates/article-template.html"],
+        "edit": ["site/templates/article-template.html","site/docs/project-state.md"],
         "read": [
             "site/blog.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "08": {
-        "edit": ["site/faq.html"],
+        "edit": ["site/faq.html","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "09": {
-        "edit": ["site/about.html"],
+        "edit": ["site/about.html","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "10": {
-        "edit": ["site/contact.html"],
+        "edit": ["site/contact.html","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "11": {
-        "edit": ["site/assets/css/style.css"],
+        "edit": ["site/assets/css/style.css","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/services.html",
@@ -121,15 +114,13 @@ PROMPT_FILES: dict[str, dict[str, list[str]]] = {
             "site/faq.html",
             "site/about.html",
             "site/contact.html",
-            "site/docs/project-state.md",
         ],
     },
     "12": {
-        "edit": ["site/assets/js/main.js"],
+        "edit": ["site/assets/js/main.js","site/docs/project-state.md"],
         "read": [
             "site/index.html",
             "site/assets/css/style.css",
-            "site/docs/project-state.md",
         ],
     },
     "13": {
@@ -138,24 +129,24 @@ PROMPT_FILES: dict[str, dict[str, list[str]]] = {
             "site/robots.txt",
             "site/docs/seo.md",
             "site/docs/internal-linking.md",
+            "site/docs/project-state.md"
         ],
         "read": [
             "site/services.html",
             "site/index.html",
-            "site/docs/project-state.md",
         ],
     },
     "14": {
         "edit": [
             "site/templates/city-template.html",
             "site/templates/state-template.html",
+            "site/docs/project-state.md"
         ],
         "read": [
             "site/docs/seo.md",
             "site/docs/architecture.md",
             "site/docs/internal-linking.md",
             "site/index.html",
-            "site/docs/project-state.md",
         ],
     },
 }
@@ -199,14 +190,10 @@ def get_completed_prompts() -> set[str]:
     )
     completed: set[str] = set()
     for line in result.stdout.splitlines():
-        # Commit format: "AI: <full label> [file1, file2]"
-        # Capture everything between "AI: " and an optional " [" or end-of-line.
         match = re.match(r"AI:\s+(.+?)(?:\s+\[|$)", line)
         if match:
             completed.add(match.group(1).strip())
-    # FIX: return is now outside the for-loop so all lines are processed.
     return completed
-
 
 def git_commit(label: str) -> None:
     subprocess.run(["git", "add", "site"], check=True)
@@ -231,7 +218,8 @@ def git_commit(label: str) -> None:
 def update_project_state(prefix: str) -> None:
     label      = STATE_LABELS.get(prefix, prefix)
     state_file = Path("site/docs/project-state.md")
-
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+  
     current = (
         state_file.read_text(encoding="utf-8")
         if state_file.exists()
@@ -259,6 +247,27 @@ def is_rate_limited(output: str) -> bool:
     return any(marker in output for marker in _RATE_LIMIT_MARKERS)
 
 
+def check_edit_files_have_content(edit_files: list[str], label: str) -> None:
+    """
+    After aider runs, verify every edit-target file exists and is non-empty.
+    Raises RuntimeError (stopping the pipeline) if any file is missing or blank.
+    """
+    empty_or_missing: list[str] = []
+    for f in edit_files:
+        p = Path(f)
+        if not p.exists() or p.stat().st_size == 0:
+            empty_or_missing.append(f)
+ 
+    if empty_or_missing:
+        raise RuntimeError(
+            f"Pipeline halted after '{label}' — "
+            f"the following edit-target files are still empty or missing:\n"
+            + "\n".join(f"  • {f}" for f in empty_or_missing)
+            + "\nFix the prompt or re-run; iteration will not advance."
+        )
+ 
+
+
 def validate_edit_files(
     edit_files: list[str],
     *,
@@ -280,14 +289,16 @@ def run_prompt(
     allow_new_files: bool = True,
 ) -> bool:
     """Run aider for one prompt file, retrying on transient errors."""
-    # FIX: allow_new_files=True by default so newly-created output files
-    #      (e.g. sitemap.xml) don't cause a FileNotFoundError.
     validate_edit_files(edit_files, allow_new=allow_new_files)
 
     prompt_text = prompt_file.read_text(encoding="utf-8").strip()
     if not prompt_text:
         raise ValueError(f"Empty prompt: {prompt_file}")
 
+    file_args: list[str] = []
+        for f in edit_files:
+            file_args += ["--file", f]
+     
     read_args: list[str] = []
     for f in read_files:
         path = Path(f)
@@ -346,6 +357,10 @@ def main() -> None:
 
     LOCK_FILE.touch()
     try:
+        prompts_dir = Path("prompts")
+        if not prompts_dir.exists():
+            prompts_dir.mkdir(parents=True, exist_ok=True)
+        
         prompts = sorted(Path("prompts").glob("*.md"))
         if not prompts:
             log.warning("No prompt files found in prompts/")
@@ -354,19 +369,14 @@ def main() -> None:
         completed = get_completed_prompts()
         log.info("Already completed: %s", completed or "none")
 
-        # FIX: entire body — edit_files, read_files, run_prompt, commit —
-        #      is now correctly indented inside the for-loop.
         for prompt_file in prompts:
             prefix = prompt_file.stem[:2]
             label  = STATE_LABELS.get(prefix, prefix)
 
-            # FIX: compare label (e.g. "Homepage built") against completed set,
-            #      not prefix ("03"), because commits store the label.
             if label in completed:
                 log.info("Skipping %s — already committed.", prompt_file.name)
                 continue
 
-            # FIX: removed `prefix = label[:2]` which corrupted the prefix.
             config = PROMPT_FILES.get(
                 prefix,
                 {"edit": ["site/index.html"], "read": []},
@@ -378,6 +388,14 @@ def main() -> None:
             log.info("Edit     : %s", edit_files)
             log.info("Read     : %s", read_files)
 
+            #Path("site/docs").mkdir(parents=True, exist_ok=True)
+            for f in edit_files:
+                p = Path(f)
+                p.parent.mkdir(parents=True, exist_ok=True)
+                if not p.exists():
+                    p.touch()
+                    log.info("Pre-created missing edit target: %s", f)
+ 
             head_before = get_head()
             run_prompt(prompt_file, edit_files, read_files)
             head_after  = get_head()
@@ -387,6 +405,9 @@ def main() -> None:
                     "HEAD changed during aider run — aider may be auto-committing "
                     "despite --no-auto-commits."
                 )
+
+
+            check_edit_files_have_content(edit_files, label)
 
             log.info("===== GIT STATUS =====")
             subprocess.run(["git", "status"])
