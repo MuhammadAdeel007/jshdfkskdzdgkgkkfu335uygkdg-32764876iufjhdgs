@@ -387,8 +387,6 @@ def main() -> None:
             log.info("Running  : %s", prompt_file.name)
             log.info("Edit     : %s", edit_files)
             log.info("Read     : %s", read_files)
-
-            #Path("site/docs").mkdir(parents=True, exist_ok=True)
             for f in edit_files:
                 p = Path(f)
                 p.parent.mkdir(parents=True, exist_ok=True)
