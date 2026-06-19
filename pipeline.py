@@ -308,24 +308,42 @@ def run_prompt(
     cmd = [
         "aider",
         "--yes",
-        "--no-stream",
+        # "--no-stream",
         "--no-auto-commits",
         "--model", MODEL,
         *edit_files,
         *read_args,
-        "--message", prompt_text,   # reuse already-read text; no second disk read
+        "--message", 
+        prompt_text,   # reuse already-read text; no second disk read
     ]
 
     for attempt in range(1, retries + 1):
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            stdout = result.stdout or ""
-            stderr = result.stderr or ""
-            output = stdout + stderr
+            log.info("Starting Aider session. Streaming output below...\n" + "="*40)
+            # result = subprocess.run(cmd, capture_output=True, text=True)
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, # Merge errors into standard output
+                text=True,
+                bufsize=1
+            )
+            full_output = []
+            if process.stdout:
+                for line in process.stdout:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                    full_output.append(line)
 
-            log.info("===== AIDER STDOUT =====\n%s", stdout)
-            if stderr:
-                log.warning("===== AIDER STDERR =====\n%s", stderr)
+            process.wait()
+            output = "".join(full_output)
+            print("="*40) # Visually close the Aider session output
+
+          
+            # stdout = result.stdout or ""
+            # stderr = result.stderr or ""
+            # output = stdout + stderr          
+            # log.info("===== AIDER STDOUT =====\n%s", stdout)
+            # if stderr:
+            #     log.warning("===== AIDER STDERR =====\n%s", stderr)
 
             if is_rate_limited(output):
                 raise RuntimeError("Rate limited by provider (429)")
