@@ -30,7 +30,10 @@ jobs:
       - name: Install Aider
         run: |
           pip install -r requirements.txt
-          
+
+      - name: Reinstall aider to restore broken file
+        run: pip install --force-reinstall --no-deps aider-chat
+      
       - name: Create project structure
         run: |
           mkdir -p site/assets/css
@@ -71,33 +74,45 @@ jobs:
       - name: Patch aider prompts
         run: |
           python - <<'EOF'
-          import re
+          import inspect
           import aider.coders.editblock_prompts as ep
           import aider.coders.wholefile_prompts as wp
-          import inspect
           
-          files = [
-              inspect.getfile(ep),
-              inspect.getfile(wp),
-          ]
-          
-          for path in files:
+          def patch_file(path):
               with open(path, "r") as f:
-                  content = f.read()
+                  lines = f.readlines()
           
-              content = re.sub(
-                  r'example_messages\s*=\s*\[.*?\]',
-                  'example_messages = []',
-                  content,
-                  flags=re.DOTALL
-              )
+              new_lines = []
+              i = 0
+              while i < len(lines):
+                  line = lines[i]
+                  stripped = line.strip()
+          
+                  if stripped.startswith("example_messages") and "=" in stripped and "[" in stripped:
+                      # Write the replacement
+                      new_lines.append("example_messages = []\n")
+                      # Count brackets to find where the original list ends
+                      depth = line.count("[") - line.count("]")
+                      if depth > 0:
+                          i += 1
+                          while i < len(lines) and depth > 0:
+                              depth += lines[i].count("[") - lines[i].count("]")
+                              i += 1
+                      else:
+                          i += 1
+                  else:
+                      new_lines.append(line)
+                      i += 1
           
               with open(path, "w") as f:
-                  f.write(content)
+                  f.writelines(new_lines)
           
               print(f"Patched: {path}")
+          
+          patch_file(inspect.getfile(ep))
+          patch_file(inspect.getfile(wp))
           EOF
-
+          
       - name: Run AI Pipeline
         run: |
           python pipeline.py
