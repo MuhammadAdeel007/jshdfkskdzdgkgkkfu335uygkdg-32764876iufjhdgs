@@ -11,7 +11,6 @@ import time
 from pathlib import Path
 import os
 
-
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
@@ -22,6 +21,12 @@ POST_COMMIT_SLEEP = 15   # seconds between prompts after a commit
 os.environ["LITELLM_LOG"] = "DEBUG"
 
 # ── Logging ────────────────────────────────────────────────────────────────────
+log.info(
+    "Repository root: %s",
+    subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"]
+    ).decode().strip()
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -179,8 +184,8 @@ def get_head() -> str:
 
 
 def repo_has_changes() -> bool:
-    result = subprocess.run(["git", "diff", "HEAD", "--quiet", "--", "site"])
-    return result.returncode != 0
+    result = subprocess.run(["git", "status", "--porcelain", "site"],capture_output=True,text=True)
+    return bool(result.stdout.strip())
 
 
 def get_completed_prompts() -> set[str]:
@@ -251,25 +256,29 @@ def is_rate_limited(output: str) -> bool:
 
 
 def check_edit_files_have_content(edit_files: list[str], label: str) -> None:
-    """
-    After aider runs, verify every edit-target file exists and is non-empty.
-    Raises RuntimeError (stopping the pipeline) if any file is missing or blank.
-    """
-    empty_or_missing: list[str] = []
+    invalid = []
+
     for f in edit_files:
         p = Path(f)
-        if not p.exists() or p.stat().st_size == 0:
-            empty_or_missing.append(f)
- 
-    if empty_or_missing:
-        raise RuntimeError(
-            f"Pipeline halted after '{label}' — "
-            f"the following edit-target files are still empty or missing:\n"
-            + "\n".join(f"  • {f}" for f in empty_or_missing)
-            + "\nFix the prompt or re-run; iteration will not advance."
-        )
- 
 
+        if not p.exists():
+            invalid.append(f"{f} (missing)")
+            continue
+
+        content = p.read_text(encoding="utf-8", errors="ignore")
+
+        if not content.strip():
+            invalid.append(f"{f} (empty)")
+            continue
+
+        if len(content.strip()) < 50:
+            invalid.append(f"{f} (too small: {len(content)} chars)")
+
+    if invalid:
+        raise RuntimeError(
+            f"Pipeline halted after '{label}'\n"
+            + "\n".join(invalid)
+        )
 
 def validate_edit_files(
     edit_files: list[str],
@@ -316,7 +325,7 @@ def run_prompt(
         "--verbose",
         "--model",
         MODEL,
-        *edit_files,
+        *file_args,
         *read_args,
         "--message", 
         prompt_text,   # reuse already-read text; no second disk read
@@ -351,6 +360,12 @@ def run_prompt(
                     full_output.append(line)
             try:
                 process.wait(timeout=600)
+                for f in edit_files:
+                  p = Path(f)
+                  if not p.exists():
+                      raise RuntimeError(f"{f} was not created")
+                  size = p.stat().st_size
+                  log.info("Post-aider file check: %s (%d bytes)",f,size)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()          # reap the zombie
@@ -366,7 +381,7 @@ def run_prompt(
                 raise RuntimeError("Rate limited by provider (429)")
 
             if process.returncode != 0:
-                raise RuntimeError(f"Aider exited with code {result.returncode}")
+                raise RuntimeError(f"Aider exited with code {process.returncode}")
 
             time.sleep(600)
           
@@ -446,10 +461,18 @@ def main() -> None:
 
             log.info("===== GIT STATUS =====")
             subprocess.run(["git", "status"])
-            subprocess.run(["git", "diff", "--stat"])
+            subprocess.run(["git", "diff", "--name-only"],check=False)
+            subprocess.run(["git", "diff", "--cached", "--name-only"],check=False)
 
-            if repo_has_changes():
+          if repo_has_changes():
                 update_project_state(prefix)
+                for f in edit_files:
+                      p = Path(f)
+                      content = p.read_text(encoding="utf-8",errors="ignore")
+              
+                      log.info("%s => %d chars",f,len(content))
+                      if not content.strip():
+                          raise RuntimeError(f"{f} is empty before commit")
                 git_commit(label)
                 time.sleep(POST_COMMIT_SLEEP)
             else:
