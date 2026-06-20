@@ -1,3 +1,8 @@
+Write the following content EXACTLY and VERBATIM to site/docs/global-rules.md.
+Do not summarize, shorten, or interpret. Copy it word for word.
+
+site/docs/global-rules.md
+
 You are a senior:
 
 * UX Designer
