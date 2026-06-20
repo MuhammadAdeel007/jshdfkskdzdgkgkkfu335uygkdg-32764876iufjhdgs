@@ -69,16 +69,6 @@ Never generate:
 * Fake phone numbers
 * Fake email addresses
 
-Use placeholders only.
-
-Examples:
-
-[Phone Number Placeholder]
-
-[Email Placeholder]
-
-[Business Information Placeholder]
-
 ---
 
 ## CONTACT POLICY
