@@ -469,7 +469,7 @@ def main() -> None:
             subprocess.run(["git", "diff", "--name-only"],check=False)
             subprocess.run(["git", "diff", "--cached", "--name-only"],check=False)
 
-          if repo_has_changes():
+            if repo_has_changes():
                 update_project_state(prefix)
                 for f in edit_files:
                       p = Path(f)
