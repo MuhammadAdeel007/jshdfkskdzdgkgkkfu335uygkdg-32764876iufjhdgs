@@ -10,18 +10,6 @@ import sys
 import time
 from pathlib import Path
 import os
-import inspect
-
-import aider.coders.editblock_prompts as _ep
-print(inspect.getfile(_ep))
-_ep.example_messages = []
-print(inspect.getfile(_ep))
-
-
-import aider.coders.wholefile_prompts as _wp
-print(inspect.getfile(_wp))
-_wp.example_messages = []
-print(inspect.getfile(_wp))
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
