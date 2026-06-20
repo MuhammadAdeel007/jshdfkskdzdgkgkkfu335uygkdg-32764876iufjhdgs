@@ -11,6 +11,12 @@ import time
 from pathlib import Path
 import os
 
+import aider.coders.editblock_prompts as _ep
+_ep.example_messages = []
+
+import aider.coders.wholefile_prompts as _wp
+_wp.example_messages = []
+
 # ── Configuration ──────────────────────────────────────────────────────────────
 
 MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
