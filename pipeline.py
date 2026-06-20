@@ -365,7 +365,7 @@ def run_prompt(
                     if not p.exists():
                         raise RuntimeError(f"{f} was not created")
 
-                    content = p.read_text(encoding="utf-8",errors="ignore)
+                    content = p.read_text(encoding="utf-8",errors="ignore")
                     log.info("Post-aider file check: %s (%d bytes, %d chars)",f,p.stat().st_size,len(content))
                     log.info("Preview of %s:\n%s",f,repr(content[:300]))                  
 
