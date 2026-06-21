@@ -144,6 +144,22 @@ jobs:
           print("Done.")
           EOF
 
+      # ── 8.5. .gitIgnore ─────────────────────────────────────────
+      - name: Write .gitignore
+        run: |
+          cat > .gitignore << 'EOF'
+          proxy/node_modules/
+          proxy/package-lock.json
+          proxy.log
+          proxy.pid
+          *.lock
+          __pycache__/
+          *.pyc
+          .aider*
+          EOF
+          git add .gitignore
+          git commit -m "Add .gitignore" || echo "Already committed"
+          
       # ── 9. Start rate-limiting proxy ─────────────────────────────────────────
       - name: Start rate-limiting proxy
         env:
