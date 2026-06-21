@@ -31,7 +31,7 @@ const UPSTREAM_BASE   = process.env.UPSTREAM_API_BASE   || 'https://integrate.ap
 const UPSTREAM_KEY    = process.env.UPSTREAM_API_KEY    || process.env.OPENAI_API_KEY || '';
 const PORT            = parseInt(process.env.PROXY_PORT          || '3000', 10);
 const MAX_PER_MIN     = parseInt(process.env.RATE_LIMIT_PER_MIN    || '30',     10);
-const MAX_PER_MIN     = parseInt(process.env.RATE_LIMIT_PER_MIN  || '30',   10);
+const MAX_TPM         = parseInt(process.env.RATE_LIMIT_TPM        || '40000',  10);
 const QUEUE_TIMEOUT   = parseInt(process.env.QUEUE_TIMEOUT_MS    || '600000', 10);
 const UPSTREAM_TIMEOUT= parseInt(process.env.UPSTREAM_TIMEOUT_MS || '300000', 10);
 
