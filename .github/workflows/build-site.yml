@@ -155,7 +155,7 @@ jobs:
           QUEUE_TIMEOUT_MS:    "600000"   # 10 minutes
           UPSTREAM_TIMEOUT_MS: "300000"   # 5 minutes
         run: |
-          node proxy/server.js 2>&1 | tee proxy.log &
+          node proxy/server.js > proxy.log 2>&1 &
           echo $! > proxy.pid
           echo "[Workflow] Proxy PID: $(cat proxy.pid)"
 
@@ -184,8 +184,16 @@ jobs:
           OPENAI_API_KEY:  "proxy-auth-token"   # Proxy ignores this; value is a placeholder
           OPENAI_API_BASE: "http://127.0.0.1:3000/v1"
           LITELLM_LOG:     "DEBUG"
-        run: python pipeline.py
-
+        run: |
+          # Stream proxy logs into THIS step's console in real-time
+          echo "[Workflow] Starting live proxy log stream..."
+          tail -f proxy.log &
+          TAIL_PID=$!
+          python pipeline.py
+          PIPELINE_EXIT=$?
+          kill $TAIL_PID 2>/dev/null || true
+          exit $PIPELINE_EXIT
+          
       # ── 11. Verify commits ────────────────────────────────────────────────────
       - name: Verify commits
         run: |
