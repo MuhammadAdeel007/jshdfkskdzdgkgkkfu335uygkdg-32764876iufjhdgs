@@ -460,7 +460,12 @@ def main() -> None:
                 if not p.exists():
                     p.touch()
                     log.info("Pre-created missing edit target: %s", f)
- 
+
+            history_file = Path(".aider.chat.history.md")
+            if history_file.exists():
+                history_file.unlink()
+                log.info("Cleared aider chat history before prompt: %s", prompt_file.name)
+
             head_before = get_head()
             run_prompt(prompt_file, edit_files, read_files)
             head_after  = get_head()
