@@ -332,6 +332,7 @@ def run_prompt(
         "--no-auto-commits",
         "--verbose",
         "--map-tokens","0",
+        "--edit-format", "whole",          # ← model outputs full file, no diff parsing
         "--chat-history-file", "/dev/null",  # isolated per prompt
         "--model",
         MODEL,
