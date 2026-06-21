@@ -1,4 +1,3 @@
-
 'use strict';
 
 /**
@@ -21,7 +20,7 @@
  * Aider / LiteLLM must be pointed at this proxy:
  *   OPENAI_API_BASE=http://127.0.0.1:<PROXY_PORT>/v1
  */
-
+ 
 const express    = require('express');
 const RateLimiter = require('./rateLimiter');
 const ApiClient   = require('./apiClient');
@@ -31,6 +30,7 @@ const ApiClient   = require('./apiClient');
 const UPSTREAM_BASE   = process.env.UPSTREAM_API_BASE   || 'https://integrate.api.nvidia.com/v1';
 const UPSTREAM_KEY    = process.env.UPSTREAM_API_KEY    || process.env.OPENAI_API_KEY || '';
 const PORT            = parseInt(process.env.PROXY_PORT          || '3000', 10);
+const MAX_PER_MIN     = parseInt(process.env.RATE_LIMIT_PER_MIN    || '30',     10);
 const MAX_PER_MIN     = parseInt(process.env.RATE_LIMIT_PER_MIN  || '30',   10);
 const QUEUE_TIMEOUT   = parseInt(process.env.QUEUE_TIMEOUT_MS    || '600000', 10);
 const UPSTREAM_TIMEOUT= parseInt(process.env.UPSTREAM_TIMEOUT_MS || '300000', 10);
@@ -46,7 +46,11 @@ if (!UPSTREAM_KEY) {
 // ── Initialise modules ────────────────────────────────────────────────────────
 
 const app     = express();
-const limiter = new RateLimiter({ maxPerMinute: MAX_PER_MIN, queueTimeoutMs: QUEUE_TIMEOUT });
+const limiter = new RateLimiter({ 
+  maxPerMinute: MAX_PER_MIN,
+  maxTokensPerMinute: MAX_TPM,
+  queueTimeoutMs: QUEUE_TIMEOUT,
+});
 const client  = new ApiClient(UPSTREAM_BASE, UPSTREAM_KEY, UPSTREAM_TIMEOUT);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -67,11 +71,17 @@ app.use((req, _res, next) => {
  */
 app.get('/health', (_req, res) => {
   res.json({
-    status:       'ok',
-    upstreamBase: UPSTREAM_BASE,
-    rateLimit:    MAX_PER_MIN,
-    queueDepth:   limiter.queueDepth,
-    currentCount: limiter.currentCount,
+    status:            'ok',
+    upstreamBase:      UPSTREAM_BASE,
+    limits: {
+      rpm:             MAX_PER_MIN,
+      tpm:             MAX_TPM,
+    },
+    current: {
+      requests:        limiter.currentReqCount,
+      tokens:          limiter.currentTokenCount,
+    },
+    queueDepth:        limiter.queueDepth,
   });
 });
 
