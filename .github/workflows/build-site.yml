@@ -155,7 +155,7 @@ jobs:
           QUEUE_TIMEOUT_MS:    "600000"   # 10 minutes
           UPSTREAM_TIMEOUT_MS: "300000"   # 5 minutes
         run: |
-          node proxy/server.js > proxy.log 2>&1 &
+          node proxy/server.js 2>&1 | tee proxy.log &
           echo $! > proxy.pid
           echo "[Workflow] Proxy PID: $(cat proxy.pid)"
 
