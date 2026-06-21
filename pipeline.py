@@ -332,7 +332,7 @@ def run_prompt(
         "--no-auto-commits",
         "--verbose",
         "--map-tokens","0",
-        "--chat-history-file", f".aider-history-{prefix}.md",  # isolated per prompt
+        "--chat-history-file", "/dev/null",  # isolated per prompt
         "--model",
         MODEL,
         *file_args,
