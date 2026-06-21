@@ -13,8 +13,8 @@ import os
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-# MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
-MODEL            = "openai/moonshotai/kimi-k2.6"
+MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
+# MODEL            = "openai/moonshotai/kimi-k2.6"
 LOCK_FILE        = Path(".aider-run.lock")
 BASE_RETRY_DELAY = 120    # seconds (doubles each attempt)
 MAX_RETRY_DELAY  = 900   # seconds cap
@@ -332,8 +332,8 @@ def run_prompt(
         "--no-auto-commits",
         "--verbose",
         "--map-tokens","0",
-        "--edit-format", "whole",          # ← model outputs full file, no diff parsing
-        "--chat-history-file", "/dev/null",  # isolated per prompt
+        # "--edit-format", "whole",          # ← model outputs full file, no diff parsing
+        # "--chat-history-file", "/dev/null",  # isolated per prompt
         "--model",
         MODEL,
         *file_args,
