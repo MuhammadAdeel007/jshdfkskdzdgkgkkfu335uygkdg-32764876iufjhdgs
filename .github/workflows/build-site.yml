@@ -48,7 +48,7 @@ jobs:
       # ── 5. Install proxy deps ─────────────────────────────────────────────────
       - name: Install proxy dependencies
         working-directory: proxy
-        run: npm ci
+        run: npm install
 
       # ── 6. Create project structure ──────────────────────────────────────────
       - name: Create project structure
