@@ -13,7 +13,8 @@ import os
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 
-MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
+# MODEL            = "openai/deepseek-ai/deepseek-v4-pro"
+MODEL            = "openai/moonshotai/kimi-k2.6"
 LOCK_FILE        = Path(".aider-run.lock")
 BASE_RETRY_DELAY = 120    # seconds (doubles each attempt)
 MAX_RETRY_DELAY  = 900   # seconds cap
