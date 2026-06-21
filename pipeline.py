@@ -185,9 +185,13 @@ def get_head() -> str:
 
 
 def repo_has_changes() -> bool:
-    result = subprocess.run(["git", "status", "--porcelain", "site"],capture_output=True,text=True)
-    return bool(result.stdout.strip())
-
+    # result = subprocess.run(["git", "status", "--porcelain", "site"],capture_output=True,text=True)
+    # return bool(result.stdout.strip())
+    add_dry = subprocess.run(["git", "add", "--dry-run", "--force", "site"],capture_output=True, text=True)
+    if add_dry.stdout.strip():
+        return True
+    cached = subprocess.run(["git", "diff", "--cached", "--quiet"],capture_output=True)
+    return cached.returncode != 0
 
 def get_completed_prompts() -> set[str]:
     """Return the set of full labels already present in git history."""
@@ -205,7 +209,8 @@ def get_completed_prompts() -> set[str]:
     return completed
 
 def git_commit(label: str) -> None:
-    subprocess.run(["git", "add", "site"], check=True)
+    # subprocess.run(["git", "add", "site"], check=True)
+    subprocess.run(["git", "add", "--force", "site"], check=True)
 
     if subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode == 0:
         log.info("No staged changes to commit for: %s", label)
