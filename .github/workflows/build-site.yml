@@ -1,4 +1,3 @@
-
 name: AI Website Builder
 
 on:
@@ -10,30 +9,48 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
 
-    env:
-      OPENAI_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-      OPENAI_API_BASE: https://integrate.api.nvidia.com/v1
+    # ── Shared env ────────────────────────────────────────────────────────────
+    # OPENAI_API_KEY / OPENAI_API_BASE are NOT set at job level intentionally.
+    # The proxy and Aider each get their own targeted env blocks below.
 
+    # env: 
+    #   OPENAI_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+    #   OPENAI_API_BASE: https://integrate.api.nvidia.com/v1
+    
     steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── 2. Python ────────────────────────────────────────────────────────────
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # ── 3. Node.js (for the rate-limiting proxy) ─────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ── 4. Install Python deps ───────────────────────────────────────────────
       - name: Install Aider
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Reinstall aider to restore broken file
         run: pip install --force-reinstall --no-deps aider-chat
-      
+
+      # ── 5. Install proxy deps ─────────────────────────────────────────────────
+      - name: Install proxy dependencies
+        working-directory: proxy
+        run: npm ci
+
+      # ── 6. Create project structure ──────────────────────────────────────────
       - name: Create project structure
         run: |
           mkdir -p site/assets/css
@@ -58,19 +75,21 @@ jobs:
           touch site/templates/state-template.html
           touch site/templates/county-template.html
           touch site/templates/city-template.html
-          
+
           touch site/docs/architecture.md
           touch site/docs/seo.md
           touch site/docs/internal-linking.md
           touch site/docs/global-rules.md
           touch site/docs/project-state.md
-          
+
+      # ── 7. Initial git commit ─────────────────────────────────────────────────
       - name: Commit Changes
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git commit --allow-empty -m "Initial commit to establish git history"
-          
+
+      # ── 8. Patch aider prompts ────────────────────────────────────────────────
       - name: Patch aider prompts
         run: |
           python - <<'EOF'
@@ -80,13 +99,14 @@ jobs:
           import aider.coders.wholefile_prompts as wp
 
           CUSTOM_SYSTEM = '''You are a senior front-end architect and SEO specialist. You write production-quality HTML, CSS, and documentation. When editing files, return the complete file content. Never truncate. Reply in English.'''
+
           def patch_file(path):
               with open(path, "r") as f:
                   content = f.read()
-          
+
               lines = content.splitlines(keepends=True)
               tree = ast.parse(content)
-          
+
               replacements = []
               for node in ast.walk(tree):
                   if isinstance(node, ast.ClassDef):
@@ -96,14 +116,14 @@ jobs:
                                   if isinstance(target, ast.Name):
                                       indent = len(lines[item.lineno - 1]) - len(lines[item.lineno - 1].lstrip())
                                       pad = " " * indent
-          
+
                                       if target.id == "example_messages":
                                           replacements.append((
                                               item.lineno - 1,
                                               item.end_lineno,
                                               pad + 'example_messages = []\n'
                                           ))
-          
+
                                       elif target.id == "main_system":
                                           replacements.append((
                                               item.lineno - 1,
@@ -111,34 +131,84 @@ jobs:
                                               pad + f'main_system = """{CUSTOM_SYSTEM}"""\n'
                                           ))
 
-              # Apply in reverse so line numbers stay valid
               for start, end, replacement in sorted(replacements, reverse=True):
                   lines[start:end] = [replacement]
-          
+
               with open(path, "w") as f:
                   f.writelines(lines)
-          
+
               print(f"Patched: {path}")
-          
+
           patch_file(inspect.getfile(ep))
           patch_file(inspect.getfile(wp))
           print("Done.")
-
           EOF
-          
-      - name: Run AI Pipeline
+
+      # ── 9. Start rate-limiting proxy ─────────────────────────────────────────
+      - name: Start rate-limiting proxy
+        env:
+          # These are the UPSTREAM credentials — used by the proxy to call Nvidia.
+          UPSTREAM_API_KEY:    ${{ secrets.NVIDIA_API_KEY }}
+          UPSTREAM_API_BASE:   https://integrate.api.nvidia.com/v1
+          PROXY_PORT:          "3000"
+          RATE_LIMIT_PER_MIN:  "30"
+          QUEUE_TIMEOUT_MS:    "600000"   # 10 minutes
+          UPSTREAM_TIMEOUT_MS: "300000"   # 5 minutes
         run: |
-          python pipeline.py
-          
+          node proxy/server.js > proxy.log 2>&1 &
+          echo $! > proxy.pid
+          echo "[Workflow] Proxy PID: $(cat proxy.pid)"
+
+          # Wait until the health endpoint responds (up to 15 seconds)
+          echo "[Workflow] Waiting for proxy to be ready..."
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:3000/health > /dev/null; then
+              echo "[Workflow] ✔ Proxy is ready."
+              curl -s http://127.0.0.1:3000/health | python3 -m json.tool
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "[Workflow] ✘ Proxy failed to start. Logs:"
+              cat proxy.log
+              exit 1
+            fi
+            echo "[Workflow]   attempt $i/15..."
+            sleep 1
+          done
+
+      # ── 10. Run AI Pipeline ───────────────────────────────────────────────────
+      - name: Run AI Pipeline
+        env:
+          # Aider / LiteLLM will send requests to the local proxy.
+          # The proxy forwards them to Nvidia with the real API key.
+          OPENAI_API_KEY:  "proxy-auth-token"   # Proxy ignores this; value is a placeholder
+          OPENAI_API_BASE: "http://127.0.0.1:3000/v1"
+          LITELLM_LOG:     "DEBUG"
+        run: python pipeline.py
+
+      # ── 11. Verify commits ────────────────────────────────────────────────────
       - name: Verify commits
         run: |
           echo "===== GIT LOG ====="
           git log --oneline -20
-      
           echo ""
           echo "===== GIT STATUS ====="
           git status
 
+      # ── 12. Push all commits ──────────────────────────────────────────────────
       - name: Push all commits
+        run: git push origin HEAD:main
+
+      # ── 13. Cleanup proxy (always runs) ──────────────────────────────────────
+      - name: Stop proxy and print logs
+        if: always()
         run: |
-          git push origin HEAD:main
+          echo "===== PROXY LOGS ====="
+          cat proxy.log || echo "(no proxy log found)"
+
+          if [ -f proxy.pid ]; then
+            PID=$(cat proxy.pid)
+            echo "[Workflow] Stopping proxy PID $PID..."
+            kill "$PID" 2>/dev/null && echo "[Workflow] Proxy stopped." || echo "[Workflow] Proxy was already stopped."
+            rm -f proxy.pid
+          fi
