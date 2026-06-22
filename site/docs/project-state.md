@@ -1,2 +1,1 @@
 
-- [x] Global rules defined
