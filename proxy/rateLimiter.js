@@ -5,54 +5,61 @@
  *
  * Fixed-minute-window rate limiter.
  *
- * Rules:
- *  - At most `maxPerMinute` requests are RELEASED per calendar minute (UTC).
- *  - Any request arriving when the current-minute bucket is full is queued.
- *  - On each minute boundary, the counter resets and the queue is drained
- *    (up to `maxPerMinute` queued requests are released in FIFO order).
- *  - Queued requests can optionally time out after `queueTimeoutMs`.
+ * Gates ONLY on RPM (requests per minute) — the one limit we know exactly.
+ * Token usage is estimated and logged for visibility but does NOT gate requests.
+ * TPM-based 429s are handled reactively in apiClient via Retry-After.
  */
 class RateLimiter {
   /**
-   * @param {object}  [opts]
-   * @param {number}  [opts.maxPerMinute=30]       – hard cap per calendar minute
-   * @param {number}  [opts.queueTimeoutMs=600000] – max wait time in queue (10 min default)
-   * @param {number}  [opts.tickMs=500]            – how often to poll for minute rollover
+   * @param {object} opts
+   * @param {number} [opts.maxPerMinute=30]          - Max requests per calendar minute
+   * @param {number} [opts.maxTokensPerMinute=40000] - Logged only, not used for gating
+   * @param {number} [opts.queueTimeoutMs=600000]    - Max ms a request waits in queue
+   * @param {number} [opts.tickMs=500]               - Minute-rollover poll interval
    */
-  constructor({ maxPerMinute = 30, maxTokensPerMinute = 40_000, queueTimeoutMs = 600_000, tickMs = 500 } = {}) {
-    this.maxPerMinute   = maxPerMinute;
-    this.maxTokensPerMinute = maxTokensPerMinute;
-    this.queueTimeoutMs = queueTimeoutMs;
+  constructor({
+    maxPerMinute       = 30,
+    maxTokensPerMinute = 40_000,
+    queueTimeoutMs     = 600_000,
+    tickMs             = 500,
+  } = {}) {
+    this.maxPerMinute       = maxPerMinute;
+    this.maxTokensPerMinute = maxTokensPerMinute; // for logging only
+    this.queueTimeoutMs     = queueTimeoutMs;
 
     this._currentMinute = RateLimiter._minuteKey();
-    this._count         = 0;
+    this._reqCount      = 0;
     this._tokenCount    = 0;
-    this._queue         = []; // { resolve, reject, label, timerId }
+    this._queue         = [];
 
     this._timer = setInterval(() => this._tick(), tickMs);
     if (this._timer.unref) this._timer.unref();
 
     console.log(
       `[RateLimiter] Initialised — ` +
-      `RPM limit: ${maxPerMinute}, ` +
-      `TPM limit: ${maxTokensPerMinute}, ` +
+      `RPM limit: ${maxPerMinute} (enforced), ` +
+      `TPM reference: ${maxTokensPerMinute} (logged only), ` +
       `queue timeout: ${queueTimeoutMs / 1000}s`
     );
   }
 
-  // ── Internal helpers ──────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Returns a stable integer that increments every calendar minute (UTC). */
   static _minuteKey() {
     const d = new Date();
     return d.getUTCHours() * 60 + d.getUTCMinutes();
   }
-  
+
+  /**
+   * Estimate tokens from a request body.
+   * Used for logging only — does NOT affect whether a request is queued.
+   * Approximation: total message characters / 4 (1 token ≈ 4 chars).
+   */
   static estimateTokens(body) {
-    if (!body) return 2_000;
+    if (!body) return 0;
+
     let chars = 0;
- 
-    // Count characters in each message's content (the bulk of tokens)
+
     if (Array.isArray(body.messages)) {
       for (const msg of body.messages) {
         if (typeof msg.content === 'string') {
@@ -64,20 +71,25 @@ class RateLimiter {
         }
       }
     }
- 
-    // Add ~10% for JSON envelope, role names, model name, etc.
-    chars = Math.ceil(chars * 1.1);
-    const estimated = Math.max(100, Math.ceil(chars / 4));
-    return estimated;
+
+    chars = Math.ceil(chars * 1.1); // add ~10% for envelope/role tokens
+    return Math.max(0, Math.ceil(chars / 4));
   }
 
-  /** Called every `tickMs`. Detects minute rollover and drains the queue. */
+  // ── Gating (RPM only) ─────────────────────────────────────────────────────
+
+  _canFit() {
+    // Gate ONLY on RPM. We know this limit exactly.
+    // TPM is handled reactively in apiClient via 429 + Retry-After.
+    return this._reqCount < this.maxPerMinute;
+  }
+
   _tick() {
     const minute = RateLimiter._minuteKey();
     if (minute !== this._currentMinute) {
       console.log(
         `[RateLimiter] ⏱  Minute rolled over ${this._currentMinute} → ${minute}. ` +
-        `Used: ${this._reqCount} req / ${this._tokenCount} tokens. ` +
+        `Used: ${this._reqCount} req, ~${this._tokenCount} tokens. ` +
         `Queue depth: ${this._queue.length}`
       );
       this._currentMinute = minute;
@@ -87,46 +99,28 @@ class RateLimiter {
     }
   }
 
-  _canFit(tokens) {
-    return (
-      this._reqCount  <  this.maxPerMinute &&
-      this._tokenCount + tokens <= this.maxTokensPerMinute
-    );
-  }
-
-  /**
-   * Release as many queued entries as the current-minute bucket allows.
-   * Called after a minute rollover.
-   */
   _drainQueue() {
     let released = 0;
-    while (this._queue.length > 0) {
-      const next = this._queue[0];
-      if (!this._canFit(next.tokens)) break; // Still no room — stop draining
- 
-      this._queue.shift();
-      clearTimeout(next.timerId);
+    while (this._queue.length > 0 && this._canFit()) {
+      const entry = this._queue.shift();
+      clearTimeout(entry.timerId);
       this._reqCount++;
-      this._tokenCount += next.tokens;
+      this._tokenCount += entry.tokens;
       released++;
- 
       console.log(
-        `[RateLimiter] ↑ Released queued "${next.label}" ` +
-        `(~${next.tokens} tokens, slot ${this._reqCount}/${this.maxPerMinute}, ` +
-        `tokens ${this._tokenCount}/${this.maxTokensPerMinute})`
+        `[RateLimiter] ↑ Released queued "${entry.label}" ` +
+        `(slot ${this._reqCount}/${this.maxPerMinute}, ~${entry.tokens} tokens)`
       );
-      next.resolve();
+      entry.resolve();
     }
- 
+
     if (released > 0) {
       console.log(`[RateLimiter] Drained ${released} request(s) from queue.`);
     }
     if (this._queue.length > 0) {
-      const next = this._queue[0];
       console.log(
-        `[RateLimiter] ${this._queue.length} request(s) still queued. ` +
-        `Next needs ~${next.tokens} tokens ` +
-        `(${this.maxTokensPerMinute - this._tokenCount} remaining this minute).`
+        `[RateLimiter] ${this._queue.length} request(s) still waiting — ` +
+        `RPM full (${this._reqCount}/${this.maxPerMinute}). Will drain next minute.`
       );
     }
   }
@@ -136,61 +130,60 @@ class RateLimiter {
   /**
    * Acquire a rate-limit slot.
    *
-   * - Resolves immediately when under the per-minute cap.
-   * - Queues the caller and resolves on the next minute boundary if at cap.
-   * - Rejects with a timeout error if the request waits longer than `queueTimeoutMs`.
+   * Resolves immediately if under RPM cap.
+   * Queues and resolves at next minute boundary if at cap.
    *
-   * @param {string} [label='req'] – Descriptive label used in log output.
+   * @param {string} label - Label for logging
+   * @param {object} body  - Request body (used for token estimate logging only)
    * @returns {Promise<void>}
    */
   acquire(label = 'req', body = null) {
-        // Sync check for minute rollover between ticks
+    // Sync check in case tick hasn't fired yet
     const minute = RateLimiter._minuteKey();
     if (minute !== this._currentMinute) {
       this._currentMinute = minute;
       this._reqCount      = 0;
       this._tokenCount    = 0;
     }
- 
+
     const tokens = RateLimiter.estimateTokens(body);
- 
-    if (this._canFit(tokens)) {
+
+    if (this._canFit()) {
       this._reqCount++;
       this._tokenCount += tokens;
       console.log(
         `[RateLimiter] ✔ Granted "${label}" immediately ` +
-        `(~${tokens} tokens, slot ${this._reqCount}/${this.maxPerMinute}, ` +
-        `tokens ${this._tokenCount}/${this.maxTokensPerMinute})`
+        `(slot ${this._reqCount}/${this.maxPerMinute}, ` +
+        `~${tokens} tokens, minute total ~${this._tokenCount})`
       );
       return Promise.resolve();
     }
- 
-    // Determine which limit is the bottleneck for the log message
-    const reason = this._reqCount >= this.maxPerMinute
-      ? `RPM full (${this._reqCount}/${this.maxPerMinute})`
-      : `TPM full (${this._tokenCount}+${tokens} > ${this.maxTokensPerMinute})`;
- 
+
+    // RPM cap reached — queue until next minute
     console.log(
-      `[RateLimiter] ⏳ Queuing "${label}" — ${reason}. ` +
+      `[RateLimiter] ⏳ Queuing "${label}" — ` +
+      `RPM full (${this._reqCount}/${this.maxPerMinute}). ` +
+      `~${tokens} estimated tokens. ` +
       `Queue depth after enqueue: ${this._queue.length + 1}`
     );
- 
+
     return new Promise((resolve, reject) => {
       const timerId = setTimeout(() => {
         this._queue = this._queue.filter((e) => e.timerId !== timerId);
         reject(new Error(
-          `[RateLimiter] "${label}" timed out after ${this.queueTimeoutMs / 1000}s in queue.`
+          `[RateLimiter] "${label}" timed out after ` +
+          `${this.queueTimeoutMs / 1000}s in queue.`
         ));
       }, this.queueTimeoutMs);
- 
+
       this._queue.push({ resolve, reject, label, tokens, timerId });
     });
   }
- 
-  get queueDepth()    { return this._queue.length; }
+
+  get queueDepth()        { return this._queue.length; }
   get currentReqCount()   { return this._reqCount; }
   get currentTokenCount() { return this._tokenCount; }
- 
+
   destroy() {
     clearInterval(this._timer);
     const remaining = this._queue.splice(0);
