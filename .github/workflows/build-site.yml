@@ -17,9 +17,10 @@ jobs:
     # OPENAI_API_KEY / OPENAI_API_BASE are NOT set at job level intentionally.
     # The proxy and Aider each get their own targeted env blocks below.
 
-    # env: 
+    env: 
     #   OPENAI_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
     #   OPENAI_API_BASE: https://integrate.api.nvidia.com/v1
+      RATE_LIMIT_TPM: "40000"
     
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
