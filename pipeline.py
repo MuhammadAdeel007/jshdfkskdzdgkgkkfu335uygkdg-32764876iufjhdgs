@@ -472,13 +472,10 @@ def main() -> None:
             log.info("Read     : %s", read_files)
             for f in edit_files:
                 p = Path(f)
-                p.parent.mkdir(parents=True, exist_ok=True)
+                p.parent.mkdir(parents=True, exist_ok=True)  # always create directory
                 if not p.exists():
-                   if "docs/" in f:
-                       p.touch()
-                       log.info("Pre-created missing edit target: %s", f)
-                   else:
-                       log.info("Skipping touch — aider will create: %s", f)
+                    p.touch()                                 # always pre-create file
+                    log.info("Pre-created: %s", f)
 
             head_before = get_head()
             run_prompt(prompt_file, edit_files, read_files)
