@@ -340,7 +340,7 @@ def run_prompt(
         "--map-tokens","0",
         "--model",
         MODEL,
-        "--temperature", "1.0",
+        "--model-settings-file", ".aider.model.settings.yml",
         *file_args,
         *read_args,
         "--message", 
