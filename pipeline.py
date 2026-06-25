@@ -197,14 +197,14 @@ def repo_has_changes() -> bool:
 def get_completed_prompts() -> set[str]:
     """Return the set of full labels already present in git history."""
     result = subprocess.run(
-        ["git", "log", "--format=%s"],
+        ["git", "log", "--format=%s", "--all"],
         capture_output=True,
         text=True,
         check=True,
     )
     completed: set[str] = set()
     for line in result.stdout.splitlines():
-        match = re.match(r"AI:\s+(.+?)(?:\s+\[|$)", line)
+        match = re.match(r"AI:\s+(.+?)(?:\s*\[|$)", line)
         if match:
             completed.add(match.group(1).strip())
     return completed
@@ -450,7 +450,15 @@ def main() -> None:
             if label in completed:
                 log.info("Skipping %s — already committed.", prompt_file.name)
                 continue
-
+            
+            primary_output = Path(edit_files[0])
+            if primary_output.exists() and len(primary_output.read_text(encoding="utf-8").strip()) > 50:
+                log.info(
+                    "Skipping %s — output file already has content (%d chars).",
+                    prompt_file.name, primary_output.stat().st_size,
+                )
+                continue
+            
             config = PROMPT_FILES.get(
                 prefix,
                 {"edit": ["site/index.html"], "read": []},
