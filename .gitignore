@@ -1,15 +1,8 @@
-# proxy
 proxy/node_modules/
 proxy/package-lock.json
-
-# runtime
 proxy.log
 proxy.pid
 *.lock
-
-# python
 __pycache__/
 *.pyc
-
-# aider
 .aider*
