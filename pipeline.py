@@ -451,21 +451,21 @@ def main() -> None:
                 log.info("Skipping %s — already committed.", prompt_file.name)
                 continue
             
-            primary_output = Path(edit_files[0])
-            if primary_output.exists() and len(primary_output.read_text(encoding="utf-8").strip()) > 50:
-                log.info(
-                    "Skipping %s — output file already has content (%d chars).",
-                    prompt_file.name, primary_output.stat().st_size,
-                )
-                continue
-            
             config = PROMPT_FILES.get(
                 prefix,
                 {"edit": ["site/index.html"], "read": []},
             )
             edit_files = config["edit"]
             read_files = config["read"]
-
+          
+            primary_output = Path(edit_files[0])
+              if primary_output.exists() and len(primary_output.read_text(encoding="utf-8").strip()) > 50:
+                  log.info(
+                      "Skipping %s — output file already has content (%d chars).",
+                      prompt_file.name, primary_output.stat().st_size,
+                  )
+                  continue
+              
             log.info("Running  : %s", prompt_file.name)
             log.info("Edit     : %s", edit_files)
             log.info("Read     : %s", read_files)
