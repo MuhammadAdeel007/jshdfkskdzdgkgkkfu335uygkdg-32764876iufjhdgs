@@ -1,0 +1,4 @@
+- name: openai/minimaxai/minimax-m3
+  max_tokens: 8192
+  temperature: 1.0
+  top_p: 0.95
