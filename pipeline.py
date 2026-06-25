@@ -337,6 +337,7 @@ def run_prompt(
         # "--no-stream",
         "--no-auto-commits",
         "--verbose",
+        "--edit-format", "whole",
         "--map-tokens","0",
         "--model",
         MODEL,
