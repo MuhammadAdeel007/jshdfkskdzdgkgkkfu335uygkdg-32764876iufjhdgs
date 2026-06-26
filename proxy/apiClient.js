@@ -19,7 +19,7 @@ const { URL } = require('url');
 // ── Retry config for upstream 429s ────────────────────────────────────────────
 const RETRY_429_MAX        = 6;       // max attempts before giving up
 const RETRY_429_BASE_MS    = 30_000;  // 30s base delay (doubles each attempt)
-const RETRY_429_CAP_MS     = 300_000; // 5 min maximum delay
+const RETRY_429_CAP_MS     = 600_000; // 10 min maximum delay
 
 class ApiClient {
   /**
