@@ -14,6 +14,7 @@
 
 const https = require('https');
 const http  = require('http');
+const { PassThrough } = require('stream');
 const { URL } = require('url');
 
 // ── Retry config for upstream 429s ────────────────────────────────────────────
@@ -114,7 +115,32 @@ class ApiClient {
             const v = upstream.headers[h];
             if (v) expressRes.setHeader(h, v);
           }
-          upstream.pipe(expressRes);
+        
+          // ── Tap the stream for logging without blocking it ──────────────
+          const tap = new PassThrough();
+          let tokenBuffer = '';
+        
+          tap.on('data', (chunk) => {
+            const text = chunk.toString();
+            const lines = text.split('\n');
+            for (const line of lines) {
+              if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+              try {
+                const json = JSON.parse(line.slice(6));
+                const token = json.choices?.[0]?.delta?.content ?? '';
+                if (token) {
+                  tokenBuffer += token;
+                  process.stdout.write(token); // live token log
+                }
+              } catch { /* ignore parse errors on partial chunks */ }
+            }
+          });
+        
+          tap.on('end', () => {
+            console.log(`\n[ApiClient] ✔ Stream complete. Total chars: ${tokenBuffer.length}`);
+          });
+        
+          upstream.pipe(tap).pipe(expressRes);
           upstream.on('end',   () => resolve({ statusCode, body: null }));
           upstream.on('error', reject);
           return;
