@@ -1,15 +1,1 @@
-- [x] Global rules defined
-- [x] Architecture document authored
-- [ ] Brand finalized (logo, wordmark, asset kit)
-- [ ] Design tokens implemented in Tailwind config
-- [ ] Component library scaffolded
-- [ ] Homepage built
-- [ ] Service detail template built
-- [ ] Location templates built (state/city/county)
-- [ ] Blog infrastructure built
-- [ ] FAQ built
-- [ ] Legal pages built
-- [ ] Programmatic generation pipeline prototyped
-- [ ] Performance budget verified
-- [ ] Accessibility audit passed (WCAG 2.1 AA)
-- [x] Architecture documented
+
