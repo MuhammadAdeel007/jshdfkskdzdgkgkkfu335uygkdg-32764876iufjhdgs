@@ -13,3 +13,4 @@
 - [ ] Performance budget verified
 - [ ] Accessibility audit passed (WCAG 2.1 AA)
 - [x] Architecture documented
+- [x] CSS base created
