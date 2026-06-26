@@ -29,7 +29,7 @@ class ApiClient {
         'Content-Type':   'application/json',
         'Authorization':  `Bearer ${this.apiKey}`,
         'Content-Length': bodyLength,
-        'Accept':         'text/event-stream',   // always SSE upstream
+        'Accept':         'text/event-stream',
         'User-Agent':     'aider-rate-limit-proxy/1.0',
       },
     };
@@ -49,7 +49,7 @@ class ApiClient {
   }
 
   /**
-   * Always sends stream=true to NVIDIA.
+   * Always sends stream=true + stream_options.include_usage=true to NVIDIA.
    * If the client (aider) wanted stream=false, we buffer the SSE tokens,
    * reassemble them into a normal chat completion JSON, and send that back.
    * If the client wanted stream=true, we pipe SSE directly.
@@ -84,8 +84,18 @@ class ApiClient {
         let   usageData   = null;
         let   firstToken  = true;
 
+        // FIX: accumulate incomplete lines across TCP chunks so we never
+        // try to JSON.parse a line that was split mid-delivery.
+        let lineBuffer = '';
+
         tap.on('data', chunk => {
-          const lines = chunk.toString().split('\n');
+          lineBuffer += chunk.toString();
+
+          // Split on newlines but keep any incomplete trailing line for the
+          // next chunk — pop() removes and returns the last element.
+          const lines = lineBuffer.split('\n');
+          lineBuffer  = lines.pop() ?? '';   // re-buffer the incomplete tail
+
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
             const raw = line.slice(6).trim();
@@ -98,12 +108,24 @@ class ApiClient {
                 process.stdout.write(token);
                 tokenBuffer += token;
               }
+              // Capture usage wherever the API decides to send it
+              // (could be a mid-stream chunk or the final one before [DONE])
               if (json.usage) usageData = json.usage;
-            } catch { /* partial chunk — ignore */ }
+            } catch { /* malformed chunk — skip */ }
           }
         });
 
         tap.on('end', () => {
+          // Flush any remaining line that arrived without a trailing newline
+          if (lineBuffer.startsWith('data: ')) {
+            const raw = lineBuffer.slice(6).trim();
+            if (raw && raw !== '[DONE]') {
+              try {
+                const json = JSON.parse(raw);
+                if (json.usage) usageData = json.usage;
+              } catch { /* ignore */ }
+            }
+          }
           console.log(`\n[ApiClient] ✔ Stream ended. Chars received: ${tokenBuffer.length}`);
         });
 
@@ -129,6 +151,8 @@ class ApiClient {
         tap.resume(); // drain but don't pipe to expressRes yet
         tap.on('end', () => {
           if (expressRes.headersSent) return;
+
+          const wordCount = tokenBuffer.split(/\s+/).filter(Boolean).length;
           const completion = {
             id:      'chatcmpl-proxy',
             object:  'chat.completion',
@@ -138,15 +162,17 @@ class ApiClient {
               message:       { role: 'assistant', content: tokenBuffer },
               finish_reason: 'stop',
             }],
+            // FIX: usageData is now reliably populated via stream_options.include_usage
             usage: usageData ?? {
               prompt_tokens:     0,
-              completion_tokens: tokenBuffer.split(/\s+/).length,
-              total_tokens:      tokenBuffer.split(/\s+/).length,
+              completion_tokens: wordCount,
+              total_tokens:      wordCount,
             },
           };
           console.log(
             `[ApiClient] Tokens used — prompt: ${completion.usage.prompt_tokens}, ` +
-            `completion: ${completion.usage.completion_tokens}`
+            `completion: ${completion.usage.completion_tokens}` +
+            (usageData ? '' : ' (estimated — API did not return usage)')
           );
           expressRes.status(200).json(completion);
           resolve({ statusCode, body: completion });
@@ -166,10 +192,15 @@ class ApiClient {
   async forward(upstreamPath, body, expressRes) {
     const clientWantsStream = !!body?.stream;
 
-    // ── Always force streaming to NVIDIA to avoid 300s timeout ───────────
-    const upstreamBody = { ...body, stream: true };
-    const payload      = JSON.stringify(upstreamBody);
-    const targetUrl    = `${this.apiBase}${upstreamPath}`;
+    // FIX: request usage data in the SSE stream so prompt_tokens is real.
+    // stream_options is an OpenAI-compatible extension supported by NVIDIA NIM.
+    const upstreamBody = {
+      ...body,
+      stream: true,
+      stream_options: { include_usage: true },
+    };
+    const payload   = JSON.stringify(upstreamBody);
+    const targetUrl = `${this.apiBase}${upstreamPath}`;
 
     console.log(
       `[ApiClient] → POST ${targetUrl} ` +
