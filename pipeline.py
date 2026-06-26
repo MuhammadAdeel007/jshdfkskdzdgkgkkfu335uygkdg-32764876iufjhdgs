@@ -349,15 +349,15 @@ def run_prompt(
     ]
 
     # ── Debug: print everything being sent to the model ──────────────────────
-    print("\n" + "=" * 60)
-    print("PROMPT FILE :", prompt_file.name)
-    print("EDIT FILES  :", edit_files)
-    print("READ FILES  :", [f for f in read_files if Path(f).exists() and Path(f).stat().st_size > 0])
-    print("MODEL       :", MODEL)
-    print("─" * 60)
-    print("PROMPT TEXT :")
-    print(prompt_text)
-    print("=" * 60 + "\n")
+    # print("\n" + "=" * 60)
+    # print("PROMPT FILE :", prompt_file.name)
+    # print("EDIT FILES  :", edit_files)
+    # print("READ FILES  :", [f for f in read_files if Path(f).exists() and Path(f).stat().st_size > 0])
+    # print("MODEL       :", MODEL)
+    # print("─" * 60)
+    # print("PROMPT TEXT :")
+    # print(prompt_text)
+    # print("=" * 60 + "\n")
     # ─────────────────────────────────────────────────────────────────────────
 
     for attempt in range(1, retries + 1):
