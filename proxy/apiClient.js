@@ -9,6 +9,28 @@ const RETRY_429_MAX     = 6;
 const RETRY_429_BASE_MS = 30_000;
 const RETRY_429_CAP_MS  = 600_000;
 
+// Unicode box-drawing block: U+2500–U+257F
+// These characters appear in decorative model output (table borders, boxed headers)
+// and cause aider's wholefile parser to treat them as filenames, crashing with
+// OSError [Errno 36] File name too long.
+const BOX_DRAWING_RE = /[\u2500-\u257F]/g;
+
+/** Map common box-drawing glyphs to safe ASCII equivalents. */
+function sanitizeForAider(text) {
+  return text.replace(BOX_DRAWING_RE, ch => {
+    switch (ch) {
+      case '─': case '━': return '-';
+      case '│': case '┃': return '|';
+      case '┌': case '┍': case '┎': case '┏':
+      case '┐': case '┑': case '┒': case '┓':
+      case '└': case '┕': case '┖': case '┗':
+      case '┘': case '┙': case '┚': case '┛':
+      case '├': case '┤': case '┬': case '┴': case '┼': return '+';
+      default: return '';   // drop any other box-drawing glyph
+    }
+  });
+}
+
 class ApiClient {
   constructor(apiBase, apiKey, timeoutMs = 300_000) {
     if (!apiBase) throw new Error('[ApiClient] apiBase is required.');
@@ -49,10 +71,16 @@ class ApiClient {
   }
 
   /**
-   * Always sends stream=true + stream_options.include_usage=true to NVIDIA.
-   * If the client (aider) wanted stream=false, we buffer the SSE tokens,
-   * reassemble them into a normal chat completion JSON, and send that back.
-   * If the client wanted stream=true, we pipe SSE directly.
+   * Always sends stream=true + stream_options.include_usage=true to upstream.
+   *
+   * Non-streaming path (clientWantsStream=false):
+   *   - Buffers SSE tokens into tokenBuffer
+   *   - Sanitizes box-drawing chars before returning to aider (prevents
+   *     wholefile_coder OSError crash on long unicode "filenames")
+   *   - Reassembles a standard chat completion JSON object
+   *
+   * Streaming path (clientWantsStream=true):
+   *   - Pipes raw SSE bytes directly to the client unchanged
    */
   _attempt(upstreamPath, body, expressRes, clientWantsStream, payload) {
     const targetUrl = `${this.apiBase}${upstreamPath}`;
@@ -84,17 +112,15 @@ class ApiClient {
         let   usageData   = null;
         let   firstToken  = true;
 
-        // FIX: accumulate incomplete lines across TCP chunks so we never
-        // try to JSON.parse a line that was split mid-delivery.
+        // Accumulate incomplete lines across TCP chunks so we never try to
+        // JSON.parse a line that was split mid-delivery.
         let lineBuffer = '';
 
         tap.on('data', chunk => {
           lineBuffer += chunk.toString();
 
-          // Split on newlines but keep any incomplete trailing line for the
-          // next chunk — pop() removes and returns the last element.
           const lines = lineBuffer.split('\n');
-          lineBuffer  = lines.pop() ?? '';   // re-buffer the incomplete tail
+          lineBuffer  = lines.pop() ?? '';   // re-buffer incomplete tail
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
@@ -108,15 +134,13 @@ class ApiClient {
                 process.stdout.write(token);
                 tokenBuffer += token;
               }
-              // Capture usage wherever the API decides to send it
-              // (could be a mid-stream chunk or the final one before [DONE])
               if (json.usage) usageData = json.usage;
-            } catch { /* malformed chunk — skip */ }
+            } catch { /* partial/malformed chunk — skip */ }
           }
         });
 
         tap.on('end', () => {
-          // Flush any remaining line that arrived without a trailing newline
+          // Flush any line that arrived without a trailing newline
           if (lineBuffer.startsWith('data: ')) {
             const raw = lineBuffer.slice(6).trim();
             if (raw && raw !== '[DONE]') {
@@ -131,7 +155,7 @@ class ApiClient {
 
         upstream.pipe(tap);
 
-        // ── Client wanted streaming: pipe SSE straight through ───────────
+        // ── Streaming client: pipe SSE bytes straight through ────────────
         if (clientWantsStream) {
           expressRes.status(statusCode);
           expressRes.setHeader('Content-Type',  'text/event-stream');
@@ -147,22 +171,35 @@ class ApiClient {
           return;
         }
 
-        // ── Client wanted non-streaming: buffer → reassemble → send JSON ──
-        tap.resume(); // drain but don't pipe to expressRes yet
+        // ── Non-streaming client: buffer → sanitize → reassemble JSON ────
+        tap.resume(); // drain but don't pipe to expressRes
         tap.on('end', () => {
           if (expressRes.headersSent) return;
 
-          const wordCount = tokenBuffer.split(/\s+/).filter(Boolean).length;
+          // KEY FIX: strip box-drawing characters (U+2500–U+257F) that the
+          // model wraps around headings/tables. Without this, aider's
+          // wholefile_coder.py tries to stat() a path containing "└──...─┘"
+          // and throws OSError [Errno 36] File name too long, crashing before
+          // it can write any file content.
+          const safeContent = sanitizeForAider(tokenBuffer);
+
+          if (safeContent.length !== tokenBuffer.length) {
+            console.log(
+              `[ApiClient] ⚠  Sanitized ${tokenBuffer.length - safeContent.length} ` +
+              `box-drawing chars from response`
+            );
+          }
+
+          const wordCount = safeContent.split(/\s+/).filter(Boolean).length;
           const completion = {
             id:      'chatcmpl-proxy',
             object:  'chat.completion',
             model:   body.model,
             choices: [{
               index:         0,
-              message:       { role: 'assistant', content: tokenBuffer },
+              message:       { role: 'assistant', content: safeContent },
               finish_reason: 'stop',
             }],
-            // FIX: usageData is now reliably populated via stream_options.include_usage
             usage: usageData ?? {
               prompt_tokens:     0,
               completion_tokens: wordCount,
@@ -192,8 +229,8 @@ class ApiClient {
   async forward(upstreamPath, body, expressRes) {
     const clientWantsStream = !!body?.stream;
 
-    // FIX: request usage data in the SSE stream so prompt_tokens is real.
-    // stream_options is an OpenAI-compatible extension supported by NVIDIA NIM.
+    // Force streaming upstream so we never hit NVIDIA's 300s non-stream timeout.
+    // Request usage data in the SSE stream so prompt_tokens is real (not 0).
     const upstreamBody = {
       ...body,
       stream: true,
@@ -249,11 +286,11 @@ class ApiClient {
         return;
       }
 
-      if (clientWantsStream) {
-        console.log(`[ApiClient] ✔ Stream complete (attempt ${attempt})`);
-      } else {
-        console.log(`[ApiClient] ✔ Non-stream response sent (attempt ${attempt})`);
-      }
+      console.log(
+        clientWantsStream
+          ? `[ApiClient] ✔ Stream complete (attempt ${attempt})`
+          : `[ApiClient] ✔ Non-stream response sent (attempt ${attempt})`
+      );
       return;
     }
   }
