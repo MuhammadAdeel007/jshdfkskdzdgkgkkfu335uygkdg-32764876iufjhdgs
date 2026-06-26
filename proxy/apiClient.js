@@ -5,17 +5,26 @@ const http  = require('http');
 const { PassThrough } = require('stream');
 const { URL } = require('url');
 
-const RETRY_429_MAX     = 6;
-const RETRY_429_BASE_MS = 30_000;
-const RETRY_429_CAP_MS  = 600_000;
+const RETRY_MAX     = 6;     // shared cap for both 429 and network retries
+const RETRY_429_BASE_MS   = 30_000;
+const RETRY_NETWORK_BASE_MS = 5_000;  // start at 5s for network errors, doubles each attempt
+const RETRY_CAP_MS  = 600_000;
 
-// Unicode box-drawing block: U+2500–U+257F
-// These characters appear in decorative model output (table borders, boxed headers)
-// and cause aider's wholefile parser to treat them as filenames, crashing with
-// OSError [Errno 36] File name too long.
+// Node.js error codes that are safe to retry (server not reached or dropped us)
+const RETRYABLE_CODES = new Set([
+  'ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED',
+  'EPIPE', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH',
+]);
+
+function isRetryableNetworkError(err) {
+  return RETRYABLE_CODES.has(err.code) || /timed out/i.test(err.message);
+}
+
+// Unicode box-drawing block U+2500–U+257F.
+// Minimax-m3 wraps output in decorative borders; aider's wholefile parser
+// tries to os.stat() those lines as filenames → OSError [Errno 36] File name too long.
 const BOX_DRAWING_RE = /[\u2500-\u257F]/g;
 
-/** Map common box-drawing glyphs to safe ASCII equivalents. */
 function sanitizeForAider(text) {
   return text.replace(BOX_DRAWING_RE, ch => {
     switch (ch) {
@@ -26,7 +35,7 @@ function sanitizeForAider(text) {
       case '└': case '┕': case '┖': case '┗':
       case '┘': case '┙': case '┚': case '┛':
       case '├': case '┤': case '┬': case '┴': case '┼': return '+';
-      default: return '';   // drop any other box-drawing glyph
+      default: return '';
     }
   });
 }
@@ -66,22 +75,6 @@ class ApiClient {
 
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-  _retryDelay(attempt) {
-    return Math.min(RETRY_429_CAP_MS, RETRY_429_BASE_MS * Math.pow(2, attempt - 1));
-  }
-
-  /**
-   * Always sends stream=true + stream_options.include_usage=true to upstream.
-   *
-   * Non-streaming path (clientWantsStream=false):
-   *   - Buffers SSE tokens into tokenBuffer
-   *   - Sanitizes box-drawing chars before returning to aider (prevents
-   *     wholefile_coder OSError crash on long unicode "filenames")
-   *   - Reassembles a standard chat completion JSON object
-   *
-   * Streaming path (clientWantsStream=true):
-   *   - Pipes raw SSE bytes directly to the client unchanged
-   */
   _attempt(upstreamPath, body, expressRes, clientWantsStream, payload) {
     const targetUrl = `${this.apiBase}${upstreamPath}`;
     const options   = this._buildOptions(targetUrl, Buffer.byteLength(payload));
@@ -92,7 +85,6 @@ class ApiClient {
         const { statusCode, statusMessage } = upstream;
         console.log(`[ApiClient] ← ${statusCode} ${statusMessage}`);
 
-        // Buffer error responses so the retry loop can inspect them
         if (statusCode >= 400) {
           const chunks = [];
           upstream.on('data', c => chunks.push(c));
@@ -106,21 +98,16 @@ class ApiClient {
           return;
         }
 
-        // ── Tap the stream for live logging ───────────────────────────────
         const tap         = new PassThrough();
         let   tokenBuffer = '';
         let   usageData   = null;
         let   firstToken  = true;
-
-        // Accumulate incomplete lines across TCP chunks so we never try to
-        // JSON.parse a line that was split mid-delivery.
-        let lineBuffer = '';
+        let   lineBuffer  = '';
 
         tap.on('data', chunk => {
           lineBuffer += chunk.toString();
-
           const lines = lineBuffer.split('\n');
-          lineBuffer  = lines.pop() ?? '';   // re-buffer incomplete tail
+          lineBuffer  = lines.pop() ?? '';
 
           for (const line of lines) {
             if (!line.startsWith('data: ')) continue;
@@ -135,19 +122,15 @@ class ApiClient {
                 tokenBuffer += token;
               }
               if (json.usage) usageData = json.usage;
-            } catch { /* partial/malformed chunk — skip */ }
+            } catch { /* partial chunk */ }
           }
         });
 
         tap.on('end', () => {
-          // Flush any line that arrived without a trailing newline
           if (lineBuffer.startsWith('data: ')) {
             const raw = lineBuffer.slice(6).trim();
             if (raw && raw !== '[DONE]') {
-              try {
-                const json = JSON.parse(raw);
-                if (json.usage) usageData = json.usage;
-              } catch { /* ignore */ }
+              try { const j = JSON.parse(raw); if (j.usage) usageData = j.usage; } catch {}
             }
           }
           console.log(`\n[ApiClient] ✔ Stream ended. Chars received: ${tokenBuffer.length}`);
@@ -171,22 +154,15 @@ class ApiClient {
           return;
         }
 
-        // ── Non-streaming client: buffer → sanitize → reassemble JSON ────
-        tap.resume(); // drain but don't pipe to expressRes
+        // ── Non-streaming client: buffer → sanitize → JSON ───────────────
+        tap.resume();
         tap.on('end', () => {
           if (expressRes.headersSent) return;
 
-          // KEY FIX: strip box-drawing characters (U+2500–U+257F) that the
-          // model wraps around headings/tables. Without this, aider's
-          // wholefile_coder.py tries to stat() a path containing "└──...─┘"
-          // and throws OSError [Errno 36] File name too long, crashing before
-          // it can write any file content.
           const safeContent = sanitizeForAider(tokenBuffer);
-
           if (safeContent.length !== tokenBuffer.length) {
             console.log(
-              `[ApiClient] ⚠  Sanitized ${tokenBuffer.length - safeContent.length} ` +
-              `box-drawing chars from response`
+              `[ApiClient] ⚠  Sanitized ${tokenBuffer.length - safeContent.length} box-drawing chars`
             );
           }
 
@@ -194,6 +170,7 @@ class ApiClient {
           const completion = {
             id:      'chatcmpl-proxy',
             object:  'chat.completion',
+            created: Math.floor(Date.now() / 1000),
             model:   body.model,
             choices: [{
               index:         0,
@@ -229,8 +206,6 @@ class ApiClient {
   async forward(upstreamPath, body, expressRes) {
     const clientWantsStream = !!body?.stream;
 
-    // Force streaming upstream so we never hit NVIDIA's 300s non-stream timeout.
-    // Request usage data in the SSE stream so prompt_tokens is real (not 0).
     const upstreamBody = {
       ...body,
       stream: true,
@@ -244,35 +219,55 @@ class ApiClient {
       `(clientStream=${clientWantsStream}, upstreamStream=true, model=${body?.model ?? 'unknown'})`
     );
 
-    for (let attempt = 1; attempt <= RETRY_429_MAX; attempt++) {
+    for (let attempt = 1; attempt <= RETRY_MAX; attempt++) {
       let result;
       try {
         result = await this._attempt(upstreamPath, upstreamBody, expressRes, clientWantsStream, payload);
       } catch (err) {
-        console.error(`[ApiClient] Network error: ${err.message}`);
+        // ── Network-level errors: retry with backoff ─────────────────────
+        // Previously these bailed out immediately with 502, meaning a single
+        // ETIMEDOUT/ECONNRESET would fail the entire aider request with no
+        // recovery.  Now they retry just like 429s do.
+        if (isRetryableNetworkError(err) && attempt < RETRY_MAX) {
+          const waitMs = Math.min(
+            RETRY_CAP_MS,
+            RETRY_NETWORK_BASE_MS * Math.pow(2, attempt - 1),
+          );
+          console.warn(
+            `[ApiClient] ⚠  Network error on attempt ${attempt}/${RETRY_MAX}: ` +
+            `${err.code ?? ''} ${err.message}. ` +
+            `Retrying in ${waitMs / 1000}s…`
+          );
+          await this._sleep(waitMs);
+          continue;
+        }
+
+        // Non-retryable or exhausted retries
+        console.error(`[ApiClient] ✘ Network error (no more retries): ${err.message}`);
         this._sendError(expressRes, 502, `Proxy upstream error: ${err.message}`);
         return;
       }
 
       const { statusCode, body: responseBody } = result;
 
+      // ── 429 rate-limit: wait and retry ───────────────────────────────
       if (statusCode === 429) {
         const retryAfterHeader = result.headers?.['retry-after'];
         const retryAfterMs     = retryAfterHeader
           ? parseInt(retryAfterHeader, 10) * 1000
-          : this._retryDelay(attempt);
+          : Math.min(RETRY_CAP_MS, RETRY_429_BASE_MS * Math.pow(2, attempt - 1));
 
         console.warn(
-          `[ApiClient] ⚠  Upstream 429 on attempt ${attempt}/${RETRY_429_MAX}. ` +
+          `[ApiClient] ⚠  Upstream 429 on attempt ${attempt}/${RETRY_MAX}. ` +
           `Waiting ${retryAfterMs / 1000}s ` +
           `(${retryAfterHeader ? 'from Retry-After header' : 'exponential backoff'}) — ` +
           `Aider is unaware.`
         );
 
-        if (attempt === RETRY_429_MAX) {
-          console.error(`[ApiClient] ✘ Gave up after ${RETRY_429_MAX} attempts (all 429).`);
+        if (attempt === RETRY_MAX) {
+          console.error(`[ApiClient] ✘ Gave up after ${RETRY_MAX} attempts (all 429).`);
           this._sendError(expressRes, 429,
-            `Upstream rate limit persists after ${RETRY_429_MAX} retries. Try again later.`
+            `Upstream rate limit persists after ${RETRY_MAX} retries. Try again later.`
           );
           return;
         }
