@@ -17,3 +17,4 @@
 - [x] Responsive breakpoints (860px, 760px)
 - [x] Documentation (components.md)
 - [x] CSS base created
+- [x] Services page built
