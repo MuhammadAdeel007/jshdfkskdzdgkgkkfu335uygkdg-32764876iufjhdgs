@@ -23,3 +23,4 @@
 - [x] City template built
 - [x] Internal linking strategy documented
 - [x] Location templates built
+- [x] Blog page built
