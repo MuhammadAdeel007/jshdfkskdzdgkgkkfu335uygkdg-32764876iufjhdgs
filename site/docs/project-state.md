@@ -1,2 +1,19 @@
 - [x] Global rules defined
 - [x] Architecture documented
+- [x] Design tokens defined (colors, type, spacing, radius, shadow)
+- [x] CSS reset and base styles
+- [x] Reusable component library
+- [x] Header + sticky nav + mobile drawer
+- [x] CTA Banner
+- [x] Lead Generation CTA Block
+- [x] Breadcrumb component
+- [x] Footer
+- [x] Service / Location / State / County / City cards
+- [x] FAQ Accordion (native, accessible)
+- [x] Disclaimer component
+- [x] Service Availability widget
+- [x] Pricing Estimate block
+- [x] Accessibility baseline (skip link, focus, contrast)
+- [x] Responsive breakpoints (860px, 760px)
+- [x] Documentation (components.md)
+- [x] CSS base created
