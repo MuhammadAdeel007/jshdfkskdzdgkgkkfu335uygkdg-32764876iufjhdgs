@@ -26,3 +26,4 @@
 - [x] Blog page built
 - [x] Article template built
 - [x] FAQ page built
+- [x] About page built
