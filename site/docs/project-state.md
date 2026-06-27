@@ -28,3 +28,4 @@
 - [x] FAQ page built
 - [x] About page built
 - [x] Contact page built
+- [x] JavaScript built
