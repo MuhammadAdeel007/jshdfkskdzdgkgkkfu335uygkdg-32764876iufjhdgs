@@ -12,12 +12,13 @@ from pathlib import Path
 import os
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-
 MODEL             = "openai/minimaxai/minimax-m3"
 LOCK_FILE         = Path(".aider-run.lock")
-BASE_RETRY_DELAY  = 120    # seconds (doubles each attempt)
-MAX_RETRY_DELAY   = 900    # seconds cap
-POST_COMMIT_SLEEP = 15     # seconds between prompts after a commit
+BASE_RETRY_DELAY  = 60     # seconds (doubles each attempt)
+MAX_RETRY_DELAY   = 300    # seconds cap
+POST_COMMIT_SLEEP = 15
+AIDER_TIMEOUT_S   = 360    # 6 min per aider session — enough for one long API
+                            # call but short enough to kill runaway multi-turn loops
 os.environ["LITELLM_LOG"] = "DEBUG"
 
 # ── Logging ────────────────────────────────────────────────────────────────────
@@ -33,37 +34,39 @@ log.info(
     subprocess.check_output(["git", "rev-parse", "--show-toplevel"]).decode().strip()
 )
 
-# ── Wholefile format instructions prepended to every prompt ───────────────────
-# Minimax-m3 tends to add a preamble and decorative borders, both of which
-# break aider's wholefile parser.  These instructions appear first in the
-# user message so the model sees them before the actual task.
+# ── Wholefile format instructions ─────────────────────────────────────────────
+# Minimax-m3 tends to:
+#   (a) add a long preamble before any file blocks  → parser finds nothing
+#   (b) output incomplete content then expect to continue → multi-turn loop
+#   (c) use unicode decorative borders               → OSError in aider
+# All three are addressed by these instructions which appear first in the
+# user message.
 FORMAT_PREFIX = """\
-=== MANDATORY OUTPUT FORMAT — FOLLOW EXACTLY ===
+=== MANDATORY OUTPUT FORMAT ===
 
-Respond using ONLY the wholefile format. No preamble, no explanation,
-no decorative borders, no markdown outside of file blocks.
+Output ONLY file blocks. No preamble, no explanation, no decoration.
 
-For EACH file, write EXACTLY:
+For EACH file write EXACTLY this pattern:
 
-<exact file path — e.g. site/docs/architecture.md>
+<file path, e.g. site/docs/architecture.md>
 ```
-<complete file content>
+<COMPLETE file content — every line — in one block>
 ```
 
-RULES:
-- Filename must be on its own line with nothing else on that line
-- Do NOT wrap filenames in backticks, bold (**), or any markdown
-- Use ONLY ``` fences — never ~~~
-- Do NOT use unicode box/table characters: ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ etc.
-- Do NOT write ANYTHING before the first filename line
-- Content inside fences must be the COMPLETE file, not a partial snippet
+CRITICAL RULES:
+- Write ALL content in ONE response. Do NOT say "continued below" or expect
+  to send more messages. Everything must be in THIS response.
+- Filename line: no backticks, no bold, no leading spaces, nothing else.
+- Fences: only ``` — never ~~~.
+- No unicode box/table chars: ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼ ━ ┃ etc.
+- Nothing before the first filename line.
+- Be CONCISE. Aim for quality over length. Under 400 lines per file.
 
-=== END FORMAT INSTRUCTIONS — TASK BELOW ===
+=== TASK ===
 
 """
 
 # ── Prompt / file map ──────────────────────────────────────────────────────────
-
 PROMPT_FILES: dict[str, dict[str, list[str]]] = {
     "00": {"edit": ["site/docs/global-rules.md","site/docs/project-state.md"], "read": []},
     "01": {"edit": ["site/docs/architecture.md","site/docs/project-state.md"], "read": ["site/docs/global-rules.md"]},
@@ -119,44 +122,42 @@ STATE_LABELS: dict[str, str] = {
 }
 
 # ── Git helpers ────────────────────────────────────────────────────────────────
-
 def get_head() -> str:
     return subprocess.check_output(["git", "rev-parse", "HEAD"]).decode().strip()
 
 
 def repo_has_changes() -> bool:
-    add_dry = subprocess.run(["git", "add", "--dry-run", "--force", "site"], capture_output=True, text=True)
+    add_dry = subprocess.run(["git","add","--dry-run","--force","site"], capture_output=True, text=True)
     if add_dry.stdout.strip():
         return True
-    cached = subprocess.run(["git", "diff", "--cached", "--quiet"], capture_output=True)
-    return cached.returncode != 0
+    return subprocess.run(["git","diff","--cached","--quiet"], capture_output=True).returncode != 0
 
 
 def get_completed_prompts() -> set[str]:
     result = subprocess.run(
-        ["git", "log", "--format=%s", "--all"],
+        ["git","log","--format=%s","--all"],
         capture_output=True, text=True, check=True,
     )
     completed: set[str] = set()
     for line in result.stdout.splitlines():
-        match = re.match(r"AI:\s+(.+?)(?:\s*\[|$)", line)
-        if match:
-            completed.add(match.group(1).strip())
+        m = re.match(r"AI:\s+(.+?)(?:\s*\[|$)", line)
+        if m:
+            completed.add(m.group(1).strip())
     return completed
 
 
 def git_commit(label: str) -> None:
-    subprocess.run(["git", "add", "--force", "site"], check=True)
-    if subprocess.run(["git", "diff", "--cached", "--quiet"]).returncode == 0:
+    subprocess.run(["git","add","--force","site"], check=True)
+    if subprocess.run(["git","diff","--cached","--quiet"]).returncode == 0:
         log.info("No staged changes to commit for: %s", label)
         return
-    changed_files = (
-        subprocess.check_output(["git", "diff", "--cached", "--name-only"])
+    changed = (
+        subprocess.check_output(["git","diff","--cached","--name-only"])
         .decode().strip().splitlines()
     )
-    summary    = ", ".join(Path(f).name for f in changed_files[:5])
+    summary    = ", ".join(Path(f).name for f in changed[:5])
     commit_msg = f"AI: {label}" + (f" [{summary}]" if summary else "")
-    subprocess.run(["git", "commit", "-m", commit_msg], check=True)
+    subprocess.run(["git","commit","-m",commit_msg], check=True)
     log.info("Committed: %s", commit_msg)
 
 
@@ -175,39 +176,42 @@ def update_project_state(prefix: str) -> None:
 
 def git_push() -> None:
     log.info("Pushing to GitHub...")
-    subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
+    subprocess.run(["git","push","origin","HEAD:main"], check=True)
     log.info("Push successful.")
 
 
 # ── Aider output analysis ──────────────────────────────────────────────────────
-
 _RATE_LIMIT_MARKERS = (
     "RateLimitError", "Error code: 429", "Too Many Requests", "'status': 429",
 )
 
-# Aider exits 0 but writes nothing when:
-# (a) the model response had no recognisable wholefile blocks
-# (b) a network/API error occurred and aider recovered gracefully
-# (c) aider's summarizer crashed (threading shutdown race in litellm)
-# All of these must be detected and retried.
-_RETRYABLE_AIDER_MARKERS = (
-    # no-edit markers
+# Aider exits 0 but writes nothing when these appear:
+_RETRYABLE_MARKERS = (
+    # no-edit markers (aider's own messages)
     "i didn't see any properly formatted edits",
     "no changes were made",
     "didn't make any changes",
     "no edits found",
     "couldn't find any edits",
     "i wasn't able to make the requested changes",
-    # API/network failure markers that aider swallows
+    # API/network failure swallowed by aider
     "litellm.exceptions",
-    "api error",
-    "502",
     "bad gateway",
-    # summarizer crash — aider recovers but the generation never completed
+    # summarizer crash (threading shutdown race in litellm)
     "summarizer unexpectedly failed",
     "cannot schedule new futures after shutdown",
     "summarization failed",
+    # model said it will continue in next message — multi-turn trap
+    "continued below",
+    "to be continued",
+    "i'll continue",
+    "continue in the next",
+    "part 1 of",
+    "part 2 of",
 )
+
+# These appear when aider is looping internally — we count them to detect runaway sessions.
+_LOOP_MARKER = "i need to make the following changes"
 
 
 def is_rate_limited(output: str) -> bool:
@@ -215,13 +219,16 @@ def is_rate_limited(output: str) -> bool:
 
 
 def aider_needs_retry(output: str) -> bool:
-    """Return True when aider exited 0 but clearly didn't write any useful content."""
     lower = output.lower()
-    return any(m in lower for m in _RETRYABLE_AIDER_MARKERS)
+    return any(m in lower for m in _RETRYABLE_MARKERS)
+
+
+def aider_is_looping(output: str) -> bool:
+    """Return True when aider has made 3+ internal retry attempts in one session."""
+    return output.lower().count(_LOOP_MARKER) >= 3
 
 
 # ── Pipeline helpers ───────────────────────────────────────────────────────────
-
 def check_edit_files_have_content(edit_files: list[str], label: str) -> None:
     PIPELINE_MANAGED = {"site/docs/project-state.md"}
     invalid = []
@@ -252,7 +259,6 @@ def validate_edit_files(edit_files: list[str], *, allow_new: bool = False) -> No
 
 
 # ── Aider runner ───────────────────────────────────────────────────────────────
-
 def run_prompt(
     prompt_file: Path,
     edit_files: list[str],
@@ -266,7 +272,6 @@ def run_prompt(
     if not raw_prompt:
         raise ValueError(f"Empty prompt: {prompt_file}")
 
-    # Prepend format instructions — the model must see these first.
     prompt_text = FORMAT_PREFIX + raw_prompt
 
     file_args = [arg for f in edit_files for arg in ("--file", f)]
@@ -284,6 +289,10 @@ def run_prompt(
         "--verbose",
         "--edit-format", "whole",
         "--map-tokens", "0",
+        # Limit how many tokens of chat history aider can accumulate.
+        # Without this, each internal retry appends the full previous response
+        # to the context, ballooning the prompt and causing hour-long sessions.
+        "--max-chat-history-tokens", "2048",
         "--model", MODEL,
         "--model-settings-file", ".aider.model.settings.yml",
         *file_args,
@@ -303,10 +312,7 @@ def run_prompt(
 
     for attempt in range(1, retries + 1):
         try:
-            log.info(
-                "Starting Aider session (attempt %d/%d)...\n" + "=" * 40,
-                attempt, retries,
-            )
+            log.info("Aider session attempt %d/%d (timeout=%ds)", attempt, retries, AIDER_TIMEOUT_S)
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -322,35 +328,40 @@ def run_prompt(
                     full_output.append(line)
 
             try:
-                process.wait(timeout=600)
-                for f in edit_files:
-                    p = Path(f)
-                    if not p.exists():
-                        raise RuntimeError(f"{f} was not created")
-                    content = p.read_text(encoding="utf-8", errors="ignore")
-                    log.info("Post-aider file check: %s (%d bytes, %d chars)", f, p.stat().st_size, len(content))
-                    log.info("Preview of %s:\n%s", f, repr(content[:300]))
-
+                process.wait(timeout=AIDER_TIMEOUT_S)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
-                raise RuntimeError("Aider timed out after 600s — possible network hang")
+                raise RuntimeError(
+                    f"Aider killed after {AIDER_TIMEOUT_S}s — "
+                    "likely stuck in multi-turn loop (model not outputting wholefile blocks)"
+                )
+
+            for f in edit_files:
+                p = Path(f)
+                if not p.exists():
+                    raise RuntimeError(f"{f} was not created")
+                content = p.read_text(encoding="utf-8", errors="ignore")
+                log.info("Post-aider: %s  %d bytes  %d chars", f, p.stat().st_size, len(content))
+                log.info("Preview: %s", repr(content[:200]))
 
             output = "".join(full_output)
             print("=" * 40)
-
             log.info("Aider exit code: %d", process.returncode)
 
             if is_rate_limited(output):
                 raise RuntimeError("Rate limited by provider (429)")
 
-            # Detect aider's "no edits" and API/summarizer crash scenarios.
-            # In all these cases aider exits 0 but writes nothing — we must
-            # retry rather than letting check_edit_files_have_content fail later.
+            if aider_is_looping(output):
+                raise RuntimeError(
+                    "Aider detected in internal retry loop (3+ fix attempts). "
+                    "Model is not producing wholefile format. Killing and retrying."
+                )
+
             if aider_needs_retry(output):
                 raise RuntimeError(
-                    "Aider exited 0 but output indicates no edits were applied "
-                    "(wrong format, API error, or summarizer crash). Retrying."
+                    "Aider exited 0 but output signals no edits were applied "
+                    "(bad format / API error / summarizer crash). Retrying."
                 )
 
             if process.returncode != 0:
@@ -360,10 +371,10 @@ def run_prompt(
             return True
 
         except Exception as exc:
-            log.error("Attempt %d/%d failed — %s: %s", attempt, retries, type(exc).__name__, exc)
+            log.error("Attempt %d/%d failed: %s: %s", attempt, retries, type(exc).__name__, exc)
             if attempt >= retries:
                 raise RuntimeError(f"Failed after {retries} attempts") from exc
-            wait = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** min(attempt - 1, 5)))
+            wait = min(MAX_RETRY_DELAY, BASE_RETRY_DELAY * (2 ** min(attempt - 1, 4)))
             log.info("Retrying in %ds…", wait)
             time.sleep(wait)
 
@@ -371,7 +382,6 @@ def run_prompt(
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
-
 def main() -> None:
     if LOCK_FILE.exists():
         raise RuntimeError("Another run is already active (lock file present).")
@@ -403,7 +413,7 @@ def main() -> None:
 
             primary_output = Path(edit_files[0])
             if primary_output.exists() and len(primary_output.read_text(encoding="utf-8").strip()) > 50:
-                log.info("Skipping %s — output file already has content.", prompt_file.name)
+                log.info("Skipping %s — output already has content.", prompt_file.name)
                 continue
 
             log.info("Running  : %s", prompt_file.name)
@@ -427,9 +437,9 @@ def main() -> None:
             check_edit_files_have_content(edit_files, label)
 
             log.info("===== GIT STATUS =====")
-            subprocess.run(["git", "status"])
-            subprocess.run(["git", "diff", "--name-only"], check=False)
-            subprocess.run(["git", "diff", "--cached", "--name-only"], check=False)
+            subprocess.run(["git","status"])
+            subprocess.run(["git","diff","--name-only"], check=False)
+            subprocess.run(["git","diff","--cached","--name-only"], check=False)
 
             if repo_has_changes():
                 update_project_state(prefix)
@@ -443,15 +453,15 @@ def main() -> None:
                         raise RuntimeError(f"{f} is empty before commit")
 
                 log.info("===== PRE-COMMIT STATUS =====")
-                subprocess.run(["git", "status"])
-                subprocess.run(["git", "diff", "--cached", "--name-only"])
+                subprocess.run(["git","status"])
+                subprocess.run(["git","diff","--cached","--name-only"])
 
                 git_commit(label)
 
                 log.info("===== VERIFYING COMMIT =====")
-                subprocess.run(["git", "show", "--stat", "HEAD"])
-                log.info("HEAD commit: %s",
-                    subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip())
+                subprocess.run(["git","show","--stat","HEAD"])
+                log.info("HEAD: %s",
+                    subprocess.check_output(["git","rev-parse","HEAD"], text=True).strip())
                 git_push()
                 log.info("Push completed successfully.")
                 time.sleep(POST_COMMIT_SLEEP)
