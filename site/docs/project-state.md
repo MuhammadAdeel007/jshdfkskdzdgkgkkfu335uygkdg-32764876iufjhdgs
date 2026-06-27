@@ -24,3 +24,4 @@
 - [x] Internal linking strategy documented
 - [x] Location templates built
 - [x] Blog page built
+- [x] Article template built
