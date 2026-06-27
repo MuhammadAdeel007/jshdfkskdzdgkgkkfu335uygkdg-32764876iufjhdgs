@@ -18,3 +18,8 @@
 - [x] Documentation (components.md)
 - [x] CSS base created
 - [x] Services page built
+- [x] State template built
+- [x] County template built
+- [x] City template built
+- [x] Internal linking strategy documented
+- [x] Location templates built
