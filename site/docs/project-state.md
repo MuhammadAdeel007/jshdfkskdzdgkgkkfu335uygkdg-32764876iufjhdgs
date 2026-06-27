@@ -25,3 +25,4 @@
 - [x] Location templates built
 - [x] Blog page built
 - [x] Article template built
+- [x] FAQ page built
