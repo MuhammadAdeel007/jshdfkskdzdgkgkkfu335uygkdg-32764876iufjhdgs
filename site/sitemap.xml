@@ -1,1 +1,43 @@
-
+<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0">
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/static.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/services.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/states.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/counties.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/cities.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/service-state.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/service-county.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/service-city.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/blog.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>https://northbeam.example/sitemaps/faq.xml</loc>
+    <lastmod>2026-01-15</lastmod>
+  </sitemap>
+</sitemapindex>

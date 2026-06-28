@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://northbeam.example/cities/houston-tx/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/phoenix-az/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/chicago-il/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/los-angeles-ca/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/new-york-ny/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/miami-fl/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/seattle-wa/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/austin-tx/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/denver-co/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://northbeam.example/cities/las-vegas-nv/</loc><lastmod>2026-01-01</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+</urlset>

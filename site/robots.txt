@@ -1,1 +1,203 @@
+# Northbeam Robots.txt
+# Production-grade crawl directives for nationwide programmatic SEO.
+# Sitemaps exposed in tiers to stay within search engine URL limits per file.
 
+User-agent: *
+Allow: /
+Allow: /assets/
+Allow: /services/
+Allow: /states/
+Allow: /counties/
+Allow: /cities/
+Allow: /blog/
+Allow: /faq/
+Allow: /about/
+Allow: /contact/
+Allow: /get-started/
+
+Disallow: /get-started/process/
+Disallow: /get-started/thanks/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /search/
+Disallow: /tmp/
+Disallow: /private/
+Disallow: /internal/
+
+Disallow: /*?sort=
+Disallow: /*?page=
+Disallow: /*?utm_
+Disallow: /*?q=
+Disallow: /*?ref=
+Disallow: /*?gclid=
+Disallow: /*?fbclid=
+Disallow: /*?msclkid=
+Disallow: /*?_ga=
+Disallow: /*?session=
+Disallow: /*?filter=
+
+Disallow: /*.json$
+Disallow: /*.xml$
+Disallow: /*.pdf$
+Disallow: /calendar$
+Disallow: /cart$
+Disallow: /checkout$
+Disallow: /account$
+Disallow: /login$
+Disallow: /logout$
+Disallow: /signup$
+
+User-agent: Googlebot
+Allow: /
+Disallow: /get-started/process/
+Disallow: /get-started/thanks/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /search/
+Disallow: /tmp/
+Disallow: /private/
+Disallow: /account/
+Disallow: /login/
+Crawl-delay: 0
+
+User-agent: Bingbot
+Allow: /
+Disallow: /get-started/process/
+Disallow: /get-started/thanks/
+Disallow: /admin/
+Disallow: /api/
+Disallow: /search/
+Disallow: /tmp/
+Disallow: /private/
+Crawl-delay: 1
+
+User-agent: Slurp
+Allow: /
+Disallow: /get-started/process/
+Disallow: /admin/
+Disallow: /api/
+Crawl-delay: 1
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /get-started/process/
+Disallow: /admin/
+Disallow: /api/
+Crawl-delay: 1
+
+User-agent: Applebot
+Allow: /
+Disallow: /get-started/process/
+Disallow: /admin/
+Disallow: /api/
+Crawl-delay: 1
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: SemrushBot-SA
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: Rogerbot
+Disallow: /
+
+User-agent: ScreamingFrogSEOSpider
+Disallow: /
+
+User-agent: SiteAuditBot
+Disallow: /
+
+User-agent: BLEXBot
+Disallow: /
+
+User-agent: YandexBot
+Disallow: /
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+User-agent: SeekportBot
+Disallow: /
+
+User-agent: Linguee Bot
+Disallow: /
+
+User-agent: TurnitinBot
+Disallow: /
+
+User-agent: ZoominfoBot
+Disallow: /
+
+User-agent: Mokanix
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: OAI-SearchBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: cohere-training-data-crawler
+Disallow: /
+
+User-agent: FacebookBot
+Disallow: /
+
+User-agent: Meta-ExternalAgent
+Disallow: /
+
+Host: https://northbeam.example
+
+Sitemap: https://northbeam.example/sitemap.xml
+Sitemap: https://northbeam.example/sitemaps/static.xml
+Sitemap: https://northbeam.example/sitemaps/services.xml
+Sitemap: https://northbeam.example/sitemaps/states.xml
+Sitemap: https://northbeam.example/sitemaps/counties.xml
+Sitemap: https://northbeam.example/sitemaps/cities.xml
+Sitemap: https://northbeam.example/sitemaps/service-state.xml
+Sitemap: https://northbeam.example/sitemaps/service-county.xml
+Sitemap: https://northbeam.example/sitemaps/service-city.xml
+Sitemap: https://northbeam.example/sitemaps/blog.xml
+Sitemap: https://northbeam.example/sitemaps/faq.xml

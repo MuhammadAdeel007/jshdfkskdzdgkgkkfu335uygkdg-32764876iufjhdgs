@@ -29,3 +29,4 @@
 - [x] About page built
 - [x] Contact page built
 - [x] JavaScript built
+- [x] SEO files created
